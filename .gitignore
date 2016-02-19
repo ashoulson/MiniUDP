@@ -25,6 +25,6 @@ Unity/Assets/UnityVS/*
 Unity/UnityVS.*
 
 # Build Files
-MiniNet/bin/*
-MiniNet/obj/*
+MiniUDP/bin/*
+MiniUDP/obj/*
 
