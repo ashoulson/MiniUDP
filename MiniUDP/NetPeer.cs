@@ -1,5 +1,5 @@
 ﻿/*
- *  MiniNet - A Simple UDP Layer for Shipping and Receiving Byte Arrays
+ *  MiniUDP - A Simple UDP Layer for Shipping and Receiving Byte Arrays
  *  Copyright (c) 2015-2016 - Alexander Shoulson - http://ashoulson.com
  *
  *  This software is provided 'as-is', without any express or implied
@@ -22,7 +22,7 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 
-namespace MiniNet
+namespace MiniUDP
 {
   public class NetPeer
   {

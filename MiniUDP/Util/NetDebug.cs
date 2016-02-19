@@ -1,5 +1,5 @@
 ﻿/*
- *  MiniNet - A Simple UDP Layer for Shipping and Receiving Byte Arrays
+ *  MiniUDP - A Simple UDP Layer for Shipping and Receiving Byte Arrays
  *  Copyright (c) 2015-2016 - Alexander Shoulson - http://ashoulson.com
  *
  *  This software is provided 'as-is', without any express or implied
@@ -19,26 +19,35 @@
 */
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
-namespace MiniNet
+namespace MiniUDP
 {
-  public class NetTime
+  public static class NetDebug
   {
-    private static readonly long start = Stopwatch.GetTimestamp();
-    private static readonly double frequency = 
-      1.0 / (double)Stopwatch.Frequency;
-
-    /// <summary>
-    /// Time represented as elapsed seconds.
-    /// </summary>
-    public static double Time
+    [Conditional("DEBUG")]
+    public static void LogError(object message)
     {
-      get
-      {
-        long diff = Stopwatch.GetTimestamp() - start;
-        return (double)diff * frequency;
-      }
+      System.Diagnostics.Debug.Print("ERROR: " + message.ToString());
+    }
+
+    [Conditional("DEBUG")]
+    public static void LogWarning(object message)
+    {
+      System.Diagnostics.Debug.Print("WARNING: " + message.ToString());
+    }
+
+    [Conditional("DEBUG")]
+    public static void Assert(bool condition)
+    {
+      System.Diagnostics.Debug.Assert(condition);
+    }
+
+    [Conditional("DEBUG")]
+    public static void Assert(bool condition, string message)
+    {
+      System.Diagnostics.Debug.Assert(condition, message);
     }
   }
 }

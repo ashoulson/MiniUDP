@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("RailgunNet")]
-[assembly: AssemblyDescription("A Client/Server Network State-Synchronization Layer for Games")]
+[assembly: AssemblyTitle("MiniUDP")]
+[assembly: AssemblyDescription("A Simple UDP Layer for Shipping and Receiving Byte Arrays")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Alexander Shoulson")]
-[assembly: AssemblyProduct("RailgunNet")]
+[assembly: AssemblyProduct("MiniUDP")]
 [assembly: AssemblyCopyright("Copyright © Alexander Shoulson 2016")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("8d5e7c49-eb58-4a7f-a5af-c8e955e86b07")]
+[assembly: Guid("e978a9ee-3fae-40f9-a785-e65cfc7c41ec")]
 
 // Version information for an assembly consists of the following four values:
 //
