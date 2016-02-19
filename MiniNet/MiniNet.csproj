@@ -35,19 +35,19 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
-    <Reference Include="UnityEngine">
-      <HintPath>$(UnityPathWin)\Editor\Data\Managed\UnityEngine.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="NetConnection.cs" />
+    <Compile Include="NetClient.cs" />
+    <Compile Include="Util\NetDebug.cs" />
+    <Compile Include="NetPeer.cs" />
     <Compile Include="NetPacket.cs" />
-    <Compile Include="NetSocket.cs" />
-    <Compile Include="Util\Common\CommonUtil.cs" />
+    <Compile Include="NetServer.cs" />
+    <Compile Include="NetConnector.cs" />
     <Compile Include="Util\Common\Pooling\GenericPool.cs" />
     <Compile Include="Util\Common\Pooling\IPoolable.cs" />
     <Compile Include="Util\Common\Pooling\Pool.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Util\NetTime.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

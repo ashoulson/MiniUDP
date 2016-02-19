@@ -1,37 +1,40 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
 using CommonTools;
-using UnityEngine;
 
 namespace MiniNet
 {
-  internal enum NetPacketType : byte
+  public enum NetPacketType : ushort
   {
     Invalid = 0,
 
-    Message = 253,
-    Connect = 254,
-    Disconnect = 255,
+    Connect = 0x1000,
+    Connected = 0x2000,
+    Disconnect = 0x3000,
+    Message = 0x4000,
   }
 
-  internal class NetPacket : IPoolable
+  public class NetPacket : IPoolable
   {
     // Max safe MTU is 1500, so we want to allow room for protocol
     public const int MAX_MESSAGE_SIZE = 1400;
+    internal const int METADATA_SIZE = 2;
 
-    // Add room for the packet type and packet size
-    internal const int MESSAGE_BUFFER_SIZE = MAX_MESSAGE_SIZE + 3;
+    // Add room for the packet type and packet size (2 bytes)
+    internal const int MESSAGE_BUFFER_SIZE = MAX_MESSAGE_SIZE + METADATA_SIZE;
+
+    // Mask for separating out the length and packet type data
+    internal const ushort LENGTH_MASK = 0x0FFF;
 
     #region IPoolable Members
     Pool IPoolable.Pool { get; set; }
     void IPoolable.Reset() { this.Reset(); }
     #endregion
 
-    internal NetPacketType PacketType { get; private set; }
+    internal NetPacketType PacketType { get { return this.packetType; } }
 
+    private NetPacketType packetType;
     private int length;
     private byte[] message;
 
@@ -39,7 +42,7 @@ namespace MiniNet
     {
       get 
       {
-        Debug.Assert(this.PacketType == NetPacketType.Message);
+        NetDebug.Assert(this.packetType == NetPacketType.Message);
         return this.length; 
       }
     }
@@ -48,22 +51,27 @@ namespace MiniNet
     { 
       get
       {
-        Debug.Assert(this.PacketType == NetPacketType.Message);
+        NetDebug.Assert(this.packetType == NetPacketType.Message);
         return this.message;
       }
     }
 
     public NetPacket()
     {
-      this.PacketType = NetPacketType.Invalid;
+      this.packetType = NetPacketType.Invalid;
       this.length = 0;
       this.message = new byte[MESSAGE_BUFFER_SIZE];
     }
 
     public void Initialize(NetPacketType type)
     {
-      this.PacketType = type;
+      this.packetType = type;
       this.length = 0;
+    }
+
+    public void Free()
+    {
+      Pool.Free(this);
     }
 
     #region Network I/O
@@ -73,18 +81,24 @@ namespace MiniNet
     /// </summary>
     internal bool NetInput(byte[] sourceBuffer, int receivedBytes)
     {
-      Debug.Assert(sourceBuffer.Length >= NetPacket.MESSAGE_BUFFER_SIZE);
+      NetDebug.Assert(sourceBuffer.Length >= NetPacket.MESSAGE_BUFFER_SIZE);
 
-      this.PacketType = (NetPacketType)sourceBuffer[0];
-      this.length = ((int)sourceBuffer[1] << 8) + sourceBuffer[2];
+      int metadata = ((int)sourceBuffer[0] << 8) + sourceBuffer[1];
+      this.packetType = (NetPacketType)(metadata & ~NetPacket.LENGTH_MASK);
+      this.length = metadata & NetPacket.LENGTH_MASK;
 
-      if (receivedBytes == (this.length + 3))
+      if (receivedBytes == (this.length + NetPacket.METADATA_SIZE))
       {
-        Array.Copy(sourceBuffer, 3, this.message, 0, this.length);
+        Array.Copy(
+          sourceBuffer, 
+          NetPacket.METADATA_SIZE, 
+          this.message, 
+          0,
+          this.length);
         return true;
       }
 
-      this.PacketType = NetPacketType.Invalid;
+      this.packetType = NetPacketType.Invalid;
       return false;
     }
 
@@ -93,23 +107,29 @@ namespace MiniNet
     /// </summary>
     internal int NetOutput(byte[] destinationBuffer)
     {
-      if (this.PacketType == NetPacketType.Invalid)
+      if (this.packetType == NetPacketType.Invalid)
         throw new InvalidOperationException("Can't send invalid packet!");
 
-      Debug.Assert(destinationBuffer.Length >= NetPacket.MESSAGE_BUFFER_SIZE);
+      NetDebug.Assert(destinationBuffer.Length >= NetPacket.MESSAGE_BUFFER_SIZE);
 
-      destinationBuffer[0] = (byte)this.PacketType;
-      destinationBuffer[1] = (byte)(this.length >> 8);
-      destinationBuffer[2] = (byte)this.length;
-      Array.Copy(this.message, 0, destinationBuffer, 3, this.length);
+      int metadata = this.length | (ushort)this.packetType;
 
-      return this.length + 3;
+      destinationBuffer[0] = (byte)(metadata >> 8);
+      destinationBuffer[1] = (byte)metadata;
+      Array.Copy(
+        this.message, 
+        0, 
+        destinationBuffer, 
+        NetPacket.METADATA_SIZE, 
+        this.length);
+
+      return this.length + NetPacket.METADATA_SIZE;
     }
     #endregion
 
     private void Reset()
     {
-      this.PacketType = NetPacketType.Invalid;
+      this.packetType = NetPacketType.Invalid;
       this.length = 0;
     }
   }
