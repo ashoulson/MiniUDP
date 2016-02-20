@@ -51,9 +51,9 @@ internal class Server
   {
     foreach (int length in source.ReadReceived(this.buffer))
     {
-      byte sequence = this.buffer[0];
+      byte sequence = this.buffer[9];
       Console.WriteLine("Received " + sequence + " from " + source.ToString());
-      source.QueueOutgoing(new byte[] { sequence }, 1);
+      source.QueueOutgoing(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, sequence }, 10);
     }
   }
 }

@@ -50,7 +50,7 @@ internal class Client
     {
       if ((this.lastHeartbeat + Client.HEARTBEAT_RATE) < Clock.Time)
       {
-        this.serverPeer.QueueOutgoing(new byte[] { this.sequence }, 1);
+        this.serverPeer.QueueOutgoing(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, this.sequence }, 10);
         this.lastHeartbeat = Clock.Time;
         this.sequence++;
       }
@@ -77,7 +77,7 @@ internal class Client
   {
     foreach (int length in source.ReadReceived(this.buffer))
     {
-      byte sequence = this.buffer[0];
+      byte sequence = this.buffer[9];
       Console.WriteLine("Received " + sequence + " from " + source.ToString());
     }
   }
