@@ -7,6 +7,26 @@ class Program
 {
   static void Main(string[] args)
   {
-    new Server(44325, 0.02).Run();
+    Server server = new Server(44325, 0.02);
+    server.Start();
+
+    while(true)
+    {
+      server.Update();
+
+      if (Console.KeyAvailable)
+      {
+        ConsoleKeyInfo key = Console.ReadKey(true);
+        switch (key.Key)
+        {
+          case ConsoleKey.F1:
+            server.Stop();
+            return;
+
+          default:
+            break;
+        } 
+      }
+    }
   }
 }
