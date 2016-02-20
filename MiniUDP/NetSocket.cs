@@ -28,6 +28,7 @@ using CommonTools;
 namespace MiniUDP
 {
   public delegate void PeerEvent(NetPeer source);
+  public delegate void ConnectionEvent(string address);
 
   public class NetSocket
   {
@@ -51,17 +52,24 @@ namespace MiniUDP
     /// </summary>
     public event PeerEvent TimedOut;
 
+    /// <summary>
+    /// An attempt to connect to a remote peer has timed out.
+    /// </summary>
+    public event ConnectionEvent ConnectFailed;
+
     private class PendingConnection
     {
       internal IPEndPoint EndPoint { get { return this.endPoint; } }
 
       private readonly IPEndPoint endPoint;
       private double lastAttempt;
+      private double expireTime;
 
       internal PendingConnection(IPEndPoint endPoint)
       {
         this.endPoint = endPoint;
         this.lastAttempt = double.NegativeInfinity;
+        this.expireTime = NetTime.Time + NetConfig.CONNECTION_TIME_OUT;
       }
 
       internal void LogAttempt()
@@ -73,6 +81,11 @@ namespace MiniUDP
       {
         double nextTime = this.lastAttempt + NetConfig.CONNECTION_RETRY_RATE;
         return nextTime < NetTime.Time;
+      }
+
+      internal bool HasExpired()
+      {
+        return NetTime.Time > this.expireTime;
       }
     }
 
@@ -116,11 +129,12 @@ namespace MiniUDP
     private byte[] dataBuffer;
     private GenericPool<NetPacket> packetPool;
     private Dictionary<IPEndPoint, NetPeer> peers;
-    private Dictionary<IPEndPoint, PendingConnection> pending;
+    private Dictionary<IPEndPoint, PendingConnection> pendingConnections;
     private HashSet<IPAddress> whiteList;
 
-    // Pre-allocated peer list for iteration tasks
+    // Pre-allocated lists for iteration tasks
     private List<NetPeer> reusablePeerList;
+    private List<PendingConnection> reusableConnectionList;
     #endregion
 
     #region Constructors
@@ -129,9 +143,11 @@ namespace MiniUDP
       this.dataBuffer = new byte[NetConfig.DATA_BUFFER_SIZE];
       this.packetPool = new GenericPool<NetPacket>();
       this.peers = new Dictionary<IPEndPoint, NetPeer>();
-      this.pending = new Dictionary<IPEndPoint, PendingConnection>();
+      this.pendingConnections = new Dictionary<IPEndPoint, PendingConnection>();
       this.whiteList = new HashSet<IPAddress>();
+
       this.reusablePeerList = new List<NetPeer>();
+      this.reusableConnectionList = new List<PendingConnection>();
 
       this.socket =
         new Socket(
@@ -179,7 +195,7 @@ namespace MiniUDP
     {
       IPEndPoint endPoint = NetSocket.StringToEndPoint(address);
       if (this.peers.ContainsKey(endPoint) == false)
-        this.pending.Add(endPoint, new PendingConnection(endPoint));
+        this.pendingConnections.Add(endPoint, new PendingConnection(endPoint));
     }
 
     /// <summary>
@@ -271,6 +287,10 @@ namespace MiniUDP
     #endregion
 
     #region Protected Helpers
+    /// <summary>
+    /// Allocates a packet from the pool for use in transmission. Packets
+    /// will be automatically freed after send -- no need to do it manually.
+    /// </summary>
     internal NetPacket AllocatePacket(
       NetPacketType packetType = NetPacketType.Message)
     {
@@ -279,9 +299,14 @@ namespace MiniUDP
       return packet;
     }
 
+    /// <summary>
+    /// Polls each pending connection to see if it is time to retry, and
+    /// does so if applicable. Cleans up any expired connection attempts.
+    /// </summary>
     private void RetryConnections()
     {
-      foreach (PendingConnection pending in this.pending.Values)
+      List<PendingConnection> expired = this.GetConnectionList();
+      foreach (PendingConnection pending in this.pendingConnections.Values)
       {
         if (pending.TimeToRetry())
         {
@@ -290,9 +315,26 @@ namespace MiniUDP
             pending.EndPoint);
           pending.LogAttempt();
         }
+        else if (pending.HasExpired())
+        {
+          expired.Add(pending);
+        }
+      }
+
+      foreach (PendingConnection pending in expired)
+      {
+        this.pendingConnections.Remove(pending.EndPoint);
+        if (this.ConnectFailed != null)
+          this.ConnectFailed.Invoke(pending.EndPoint.ToString());
       }
     }
 
+    /// <summary>
+    /// Pre-processes an incoming packet for protocol-level traffic before
+    /// sending anything to higher levels. Returns true if the packet
+    /// should be escalated to the application level, false if the packet
+    /// should be considered "consumed".
+    /// </summary>
     private bool PreProcess(NetPacket packet, IPEndPoint source)
     {
       switch (packet.PacketType)
@@ -318,6 +360,9 @@ namespace MiniUDP
       }
     }
 
+    /// <summary>
+    /// Handles incoming connection-related packets by creating peers.
+    /// </summary>
     private void HandleConnection(IPEndPoint source, bool sendResponse)
     {
       if (this.VerifySource(source))
@@ -327,11 +372,14 @@ namespace MiniUDP
         if (sendResponse)
           peer.AddOutgoing(this.AllocatePacket(NetPacketType.Connected));
 
-        if (this.pending.ContainsKey(source))
-          this.pending.Remove(source);
+        if (this.pendingConnections.ContainsKey(source))
+          this.pendingConnections.Remove(source);
       }
     }
 
+    /// <summary>
+    /// Handles incoming disconnection-related packets by removing peers.
+    /// </summary>
     private void HandleDisconnection(IPEndPoint source)
     {
       NetPeer peer = null;
@@ -348,6 +396,11 @@ namespace MiniUDP
       }
     }
 
+    /// <summary>
+    /// Verifies that the source of a packet is on our whitelist, if we are
+    /// using one. Note that this is not very secure without encryption, but
+    /// is useful for debugging and can filter out accidents.
+    /// </summary>
     private bool VerifySource(IPEndPoint source)
     {
       if (this.UseWhiteList == false)
@@ -482,6 +535,12 @@ namespace MiniUDP
     {
       this.reusablePeerList.Clear();
       return this.reusablePeerList;
+    }
+
+    private List<PendingConnection> GetConnectionList()
+    {
+      this.reusableConnectionList.Clear();
+      return this.reusableConnectionList;
     }
     #endregion
   }
