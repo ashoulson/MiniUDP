@@ -23,6 +23,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 
+using CommonTools;
+
 namespace MiniUDP
 {
   internal enum NetPeerStatus
@@ -153,7 +155,7 @@ namespace MiniUDP
     {
       if (this.status != NetPeerStatus.Open)
       {
-        NetDebug.LogWarning("Activity on closed peer");
+        CommonDebug.LogWarning("Activity on closed peer");
         return false;
       }
 

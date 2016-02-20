@@ -180,9 +180,9 @@ namespace MiniUDP
       catch (SocketException exception)
       {
         if (exception.ErrorCode == 10048)
-          NetDebug.LogError("Port " + port + " unavailable!");
+          CommonDebug.LogError("Port " + port + " unavailable!");
         else
-          NetDebug.LogError(exception.Message);
+          CommonDebug.LogError(exception.Message);
         return;
       }
     }
@@ -223,7 +223,8 @@ namespace MiniUDP
           if (this.peers.TryGetValue(source, out sourcePeer))
             sourcePeer.AddReceived(packet);
           else
-            NetDebug.LogWarning("Message from unrecognized peer: " + source);
+            CommonDebug.LogWarning(
+              "Message from unrecognized peer: " + source);
         }
       }
 
@@ -355,7 +356,7 @@ namespace MiniUDP
           return true;
 
         default:
-          NetDebug.LogWarning("Invalid packet type for server");
+          CommonDebug.LogWarning("Invalid packet type for server");
           return false;
       }
     }
@@ -392,7 +393,7 @@ namespace MiniUDP
       }
       else
       {
-        NetDebug.LogWarning("Disconnection from unknown source");
+        CommonDebug.LogWarning("Disconnection from unknown source");
       }
     }
 
@@ -409,7 +410,7 @@ namespace MiniUDP
       if (this.whiteList.Contains(source.Address))
         return true;
 
-      NetDebug.LogWarning("Unrecognized connection: " + source.Address);
+      CommonDebug.LogWarning("Unrecognized connection: " + source.Address);
       return false;
     }
 
@@ -526,7 +527,7 @@ namespace MiniUDP
       }
       catch
       {
-        NetDebug.LogWarning(
+        CommonDebug.LogWarning(
           "Failed to set control code for ignoring ICMP port unreachable.");
       }
     }
