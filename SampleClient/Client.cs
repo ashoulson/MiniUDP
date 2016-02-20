@@ -30,6 +30,7 @@ internal class Client
     this.netSocket.Connected += this.OnConnected;
     this.netSocket.Disconnected += this.OnDisconnected;
     this.netSocket.TimedOut += this.OnTimedOut;
+    this.netSocket.ConnectFailed += this.OnConnectFailed;
 
     this.updateClock = new Clock(tickRate);
     updateClock.OnFixedUpdate += this.OnFixedUpdate;
@@ -100,5 +101,11 @@ internal class Client
   {
     Console.WriteLine("Server connection timed out");
     this.serverPeer = null;
+  }
+
+  private void OnConnectFailed(string address)
+  {
+    Console.WriteLine("Connection to " + address + " failed, retrying...");
+    this.netSocket.Connect(address);
   }
 }
