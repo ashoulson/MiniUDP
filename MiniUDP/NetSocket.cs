@@ -119,10 +119,7 @@ namespace MiniUDP
           AddressFamily.InterNetwork,
           SocketType.Dgram,
           ProtocolType.Udp);
-
-      this.socket.ReceiveBufferSize = NetSocket.DATA_BUFFER_SIZE;
-      this.socket.SendBufferSize = NetSocket.DATA_BUFFER_SIZE;
-      this.socket.Blocking = false;
+      this.ConfigureSocket();
     }
     #endregion
 
@@ -375,6 +372,26 @@ namespace MiniUDP
       catch
       {
         return false;
+      }
+    }
+
+    private void ConfigureSocket()
+    {
+      this.socket.ReceiveBufferSize = NetSocket.DATA_BUFFER_SIZE;
+      this.socket.SendBufferSize = NetSocket.DATA_BUFFER_SIZE;
+      this.socket.Blocking = false;
+
+      try
+      {
+        const uint IOC_IN = 0x80000000;
+        const uint IOC_VENDOR = 0x18000000;
+        uint SIO_UDP_CONNRESET = IOC_IN | IOC_VENDOR | 12;
+        this.socket.IOControl((int)SIO_UDP_CONNRESET, new byte[] { 0 }, null);
+      }
+      catch
+      {
+        NetDebug.LogWarning(
+          "Failed to set control code for ignoring ICMP port unreachable.");
       }
     }
     #endregion
