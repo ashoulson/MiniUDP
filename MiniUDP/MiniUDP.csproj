@@ -37,7 +37,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="NetConfig.cs" />
-    <Compile Include="Util\NetDebug.cs" />
+    <Compile Include="Util\Common\CommonDebug.cs" />
     <Compile Include="NetPeer.cs" />
     <Compile Include="NetPacket.cs" />
     <Compile Include="NetSocket.cs" />

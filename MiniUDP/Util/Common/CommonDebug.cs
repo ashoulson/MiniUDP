@@ -1,6 +1,6 @@
 ﻿/*
- *  MiniUDP - A Simple UDP Layer for Shipping and Receiving Byte Arrays
- *  Copyright (c) 2015-2016 - Alexander Shoulson - http://ashoulson.com
+ *  Common Utilities for Working with C# and Unity
+ *  Copyright (c) 2016 - Alexander Shoulson - http://ashoulson.com
  *
  *  This software is provided 'as-is', without any express or implied
  *  warranty. In no event will the authors be held liable for any damages
@@ -19,13 +19,22 @@
 */
 
 using System;
-using System.Collections.Generic;
+using System.Collections;
 using System.Diagnostics;
 
-namespace MiniUDP
+namespace CommonTools
 {
-  public static class NetDebug
+  public static class CommonDebug
   {
+    // TODO: We may want some logging values outside of debug/diagnostics for
+    // release builds. Investigate this possibility.
+
+    [Conditional("DEBUG")]
+    public static void Log(object message)
+    {
+      System.Diagnostics.Debug.Print("LOG: " + message.ToString());
+    }
+
     [Conditional("DEBUG")]
     public static void LogError(object message)
     {
