@@ -27,4 +27,9 @@ Unity/UnityVS.*
 # Build Files
 MiniUDP/bin/*
 MiniUDP/obj/*
+SampleClient/bin/*
+SampleClient/obj/*
+SampleServer/bin/*
+SampleServer/obj/*
+
 

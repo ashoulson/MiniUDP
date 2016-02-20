@@ -19,26 +19,55 @@
 */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 
 namespace MiniUDP
 {
+  public delegate void MessagesWaiting(NetPeer source);
+
   public class NetPeer
   {
+    public event MessagesWaiting MessagesWaiting;
+
     public object UserData { get; set; }
 
-    internal IPEndPoint endPoint;
-    internal Queue<NetPacket> received;
-    internal Queue<NetPacket> outgoing;
+    internal IEnumerable<NetPacket> Received { get { return this.received; } }
+    internal IEnumerable<NetPacket> Outgoing { get { return this.outgoing; } }
+    internal IPEndPoint EndPoint { get { return this.endPoint; } }
 
-    public NetPeer(IPEndPoint endPoint)
+    private readonly Queue<NetPacket> received;
+    private readonly Queue<NetPacket> outgoing;
+    private readonly IPEndPoint endPoint;
+    private readonly NetSocket owner;
+
+    public NetPeer(IPEndPoint endPoint, NetSocket owner)
     {
       this.UserData = null;
 
-      this.endPoint = endPoint;
       this.received = new Queue<NetPacket>();
       this.outgoing = new Queue<NetPacket>();
+      this.endPoint = endPoint;
+      this.owner = owner;
+    }
+
+    public override string ToString()
+    {
+      return this.EndPoint.ToString();
+    }
+
+    public void QueueOutgoing(byte[] buffer, int length)
+    {
+      NetPacket packet = this.owner.AllocatePacket();
+      packet.Write(buffer, length);
+      this.outgoing.Enqueue(packet);
+    }
+
+    public IEnumerable<int> ReadReceived(byte[] buffer)
+    {
+      foreach (NetPacket packet in this.received)
+        yield return packet.Read(buffer);
     }
 
     internal void QueueOutgoing(NetPacket packet)
@@ -51,20 +80,24 @@ namespace MiniUDP
       this.received.Enqueue(packet);
     }
 
-    #region Local I/O
-    internal NetPacket GetReceived()
+    internal void FlagMessagesWaiting()
     {
-      if (this.received.Count > 0)
-        return this.received.Dequeue();
-      return null;
+      if ((this.received.Count > 0) && (this.MessagesWaiting != null))
+        this.MessagesWaiting.Invoke(this);
     }
 
-    internal NetPacket GetOutgoing()
+    internal void ClearReceived()
     {
-      if (this.outgoing.Count > 0)
-        return this.outgoing.Dequeue();
-      return null;
+      foreach (NetPacket packet in this.received)
+        packet.Free();
+      this.received.Clear();
     }
-    #endregion
+
+    internal void ClearOutgoing()
+    {
+      foreach (NetPacket packet in this.outgoing)
+        packet.Free();
+      this.outgoing.Clear();
+    }
   }
 }
