@@ -31,11 +31,25 @@ namespace MiniUDP
 
   public class NetSocket
   {
+    /// <summary>
+    /// A remote peer has connected.
+    /// </summary>
     public event PeerEvent Connected;
 
-    private const int DATA_BUFFER_SIZE = 2048;
-    private const int CONNECTION_RETRY_COUNT = 20;
-    private const double CONNECTION_RETRY_RATE = 0.5;
+    /// <summary>
+    /// A local peer has been closed and its disconnect message has been sent.
+    /// </summary>
+    public event PeerEvent Closed;
+
+    /// <summary>
+    /// A remote peer has disconnected.
+    /// </summary>
+    public event PeerEvent Disconnected;
+
+    /// <summary>
+    /// A remote peer has timed out.
+    /// </summary>
+    public event PeerEvent TimedOut;
 
     private class PendingConnection
     {
@@ -57,7 +71,7 @@ namespace MiniUDP
 
       internal bool TimeToRetry()
       {
-        double nextTime = this.lastAttempt + NetSocket.CONNECTION_RETRY_RATE;
+        double nextTime = this.lastAttempt + NetConfig.CONNECTION_RETRY_RATE;
         return nextTime < NetTime.Time;
       }
     }
@@ -95,6 +109,7 @@ namespace MiniUDP
 
     #region Properties and Fields
     public bool UseWhiteList { get; set; }
+    public int PeerCount { get { return this.peers.Count; } }
 
     protected Socket socket;
 
@@ -103,16 +118,20 @@ namespace MiniUDP
     private Dictionary<IPEndPoint, NetPeer> peers;
     private Dictionary<IPEndPoint, PendingConnection> pending;
     private HashSet<IPAddress> whiteList;
+
+    // Pre-allocated peer list for iteration tasks
+    private List<NetPeer> reusablePeerList;
     #endregion
 
     #region Constructors
     public NetSocket()
     {
-      this.dataBuffer = new byte[NetSocket.DATA_BUFFER_SIZE];
+      this.dataBuffer = new byte[NetConfig.DATA_BUFFER_SIZE];
       this.packetPool = new GenericPool<NetPacket>();
       this.peers = new Dictionary<IPEndPoint, NetPeer>();
       this.pending = new Dictionary<IPEndPoint, PendingConnection>();
       this.whiteList = new HashSet<IPAddress>();
+      this.reusablePeerList = new List<NetPeer>();
 
       this.socket =
         new Socket(
@@ -164,6 +183,14 @@ namespace MiniUDP
     }
 
     /// <summary>
+    /// Queues up a disconnect message to a given peer.
+    /// </summary>
+    public void Disconnect(NetPeer peer)
+    {
+      peer.AddOutgoing(this.AllocatePacket(NetPacketType.Disconnect));
+    }
+
+    /// <summary>
     /// Called at the beginning of processing. Reads all incoming data,
     /// processes it, and assigns packets to the peers it received them from.
     /// </summary>
@@ -178,15 +205,27 @@ namespace MiniUDP
         {
           NetPeer sourcePeer;
           if (this.peers.TryGetValue(source, out sourcePeer))
-            sourcePeer.QueueReceived(packet);
+            sourcePeer.AddReceived(packet);
           else
             NetDebug.LogWarning("Message from unrecognized peer: " + source);
         }
       }
 
-      // We're done receiving everything, so flag peers if applicable
+      List<NetPeer> timedOutPeers = this.GetPeerList();
       foreach (NetPeer peer in this.peers.Values)
+      {
         peer.FlagMessagesWaiting();
+        if (peer.IsTimedOut())
+          timedOutPeers.Add(peer);
+      }
+
+      foreach (NetPeer peer in timedOutPeers)
+      {
+        peer.SilentClose();
+        this.peers.Remove(peer.EndPoint);
+        if (this.TimedOut != null)
+          this.TimedOut.Invoke(peer);
+      }
     }
 
     /// <summary>
@@ -197,6 +236,7 @@ namespace MiniUDP
     {
       this.RetryConnections();
 
+      List<NetPeer> closedPeers = this.GetPeerList();
       foreach (NetPeer peer in this.peers.Values)
       {
         foreach (NetPacket packet in peer.Outgoing)
@@ -205,7 +245,28 @@ namespace MiniUDP
         // Clean all incoming and outgoing packets
         peer.ClearOutgoing();
         peer.ClearReceived();
+
+        if (peer.Status == NetPeerStatus.Closed)
+          closedPeers.Add(peer);
       }
+
+      foreach (NetPeer peer in closedPeers)
+      {
+        peer.SilentClose();
+        this.peers.Remove(peer.EndPoint);
+        if (this.Closed != null)
+          this.Closed.Invoke(peer);
+      }
+    }
+
+    /// <summary>
+    /// Queues disconnect packets for all peers (but they won't be sent
+    /// until the next Transmit() call).
+    /// </summary>
+    public void Shutdown()
+    {
+      foreach (NetPeer peer in this.peers.Values)
+        peer.Close();
     }
     #endregion
 
@@ -244,6 +305,10 @@ namespace MiniUDP
           this.HandleConnection(source, false);
           return false;
 
+        case NetPacketType.Disconnect:
+          this.HandleDisconnection(source);
+          return false;
+
         case NetPacketType.Message:
           return true;
 
@@ -260,10 +325,26 @@ namespace MiniUDP
         NetPeer peer = this.RegisterPeer(source);
 
         if (sendResponse)
-          peer.QueueOutgoing(this.AllocatePacket(NetPacketType.Connected));
+          peer.AddOutgoing(this.AllocatePacket(NetPacketType.Connected));
 
         if (this.pending.ContainsKey(source))
           this.pending.Remove(source);
+      }
+    }
+
+    private void HandleDisconnection(IPEndPoint source)
+    {
+      NetPeer peer = null;
+      if (this.peers.TryGetValue(source, out peer))
+      {
+        peer.SilentClose();
+        this.peers.Remove(source);
+        if (this.Disconnected != null)
+          this.Disconnected.Invoke(peer);
+      }
+      else
+      {
+        NetDebug.LogWarning("Disconnection from unknown source");
       }
     }
 
@@ -279,6 +360,7 @@ namespace MiniUDP
       return false;
     }
 
+    #region Peer Management
     private NetPeer RegisterPeer(IPEndPoint source)
     {
       NetPeer peer = this.GetPeer(source);
@@ -306,6 +388,7 @@ namespace MiniUDP
         return peer;
       return null;
     }
+    #endregion
 
     /// <summary> 
     /// Returns true if OS socket has data available for read. 
@@ -377,8 +460,8 @@ namespace MiniUDP
 
     private void ConfigureSocket()
     {
-      this.socket.ReceiveBufferSize = NetSocket.DATA_BUFFER_SIZE;
-      this.socket.SendBufferSize = NetSocket.DATA_BUFFER_SIZE;
+      this.socket.ReceiveBufferSize = NetConfig.DATA_BUFFER_SIZE;
+      this.socket.SendBufferSize = NetConfig.DATA_BUFFER_SIZE;
       this.socket.Blocking = false;
 
       try
@@ -393,6 +476,12 @@ namespace MiniUDP
         NetDebug.LogWarning(
           "Failed to set control code for ignoring ICMP port unreachable.");
       }
+    }
+
+    private List<NetPeer> GetPeerList()
+    {
+      this.reusablePeerList.Clear();
+      return this.reusablePeerList;
     }
     #endregion
   }

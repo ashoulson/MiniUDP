@@ -36,6 +36,7 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="NetConfig.cs" />
     <Compile Include="Util\NetDebug.cs" />
     <Compile Include="NetPeer.cs" />
     <Compile Include="NetPacket.cs" />

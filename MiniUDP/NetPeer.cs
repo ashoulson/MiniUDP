@@ -25,22 +25,30 @@ using System.Net;
 
 namespace MiniUDP
 {
-  public delegate void MessagesWaiting(NetPeer source);
+  internal enum NetPeerStatus
+  {
+    Open,
+    Closed,
+  }
 
   public class NetPeer
   {
-    public event MessagesWaiting MessagesWaiting;
+    public event PeerEvent MessagesWaiting;
 
     public object UserData { get; set; }
 
     internal IEnumerable<NetPacket> Received { get { return this.received; } }
     internal IEnumerable<NetPacket> Outgoing { get { return this.outgoing; } }
     internal IPEndPoint EndPoint { get { return this.endPoint; } }
+    internal NetPeerStatus Status { get { return this.status; } }
 
     private readonly Queue<NetPacket> received;
     private readonly Queue<NetPacket> outgoing;
     private readonly IPEndPoint endPoint;
+    private NetPeerStatus status;
+
     private readonly NetSocket owner;
+    private double lastReceivedTime;
 
     public NetPeer(IPEndPoint endPoint, NetSocket owner)
     {
@@ -49,7 +57,10 @@ namespace MiniUDP
       this.received = new Queue<NetPacket>();
       this.outgoing = new Queue<NetPacket>();
       this.endPoint = endPoint;
+      this.status = NetPeerStatus.Open;
+
       this.owner = owner;
+      this.lastReceivedTime = NetTime.Time;
     }
 
     public override string ToString()
@@ -57,26 +68,57 @@ namespace MiniUDP
       return this.EndPoint.ToString();
     }
 
-    public void QueueOutgoing(byte[] buffer, int length)
+    /// <summary>
+    /// Queues data to be sent. The actual send will occur at the socket's
+    /// next Transmit() call.
+    /// </summary>
+    public void EnqueueSend(byte[] buffer, int length)
     {
+      if (this.VerifyOpenPeer() == false)
+        return;
+
       NetPacket packet = this.owner.AllocatePacket();
       packet.Write(buffer, length);
       this.outgoing.Enqueue(packet);
     }
 
+    /// <summary>
+    /// Iterates over all received messages, writing to the buffer and
+    /// returning the length in bytes for each one.
+    /// </summary>
     public IEnumerable<int> ReadReceived(byte[] buffer)
     {
+      if (this.VerifyOpenPeer() == false)
+        yield break;
+
       foreach (NetPacket packet in this.received)
         yield return packet.Read(buffer);
     }
 
-    internal void QueueOutgoing(NetPacket packet)
+    /// <summary>
+    /// Closes the connection and queues a disconnect message to send.
+    /// Note that this message will be sent at the next socket Transmit().
+    /// </summary>
+    public void Close()
+    {
+      this.AddOutgoing(this.owner.AllocatePacket(NetPacketType.Disconnect));
+      this.status = NetPeerStatus.Closed;
+    }
+
+    #region Internal Helpers
+    internal void SilentClose()
+    {
+      this.status = NetPeerStatus.Closed;
+    }
+
+    internal void AddOutgoing(NetPacket packet)
     {
       this.outgoing.Enqueue(packet);
     }
 
-    internal void QueueReceived(NetPacket packet)
+    internal void AddReceived(NetPacket packet)
     {
+      this.lastReceivedTime = NetTime.Time;
       this.received.Enqueue(packet);
     }
 
@@ -84,6 +126,13 @@ namespace MiniUDP
     {
       if ((this.received.Count > 0) && (this.MessagesWaiting != null))
         this.MessagesWaiting.Invoke(this);
+    }
+
+    internal bool IsTimedOut()
+    {
+      double timeoutTime = 
+        this.lastReceivedTime + NetConfig.CONNECTION_TIME_OUT;
+      return timeoutTime < NetTime.Time;
     }
 
     internal void ClearReceived()
@@ -99,5 +148,17 @@ namespace MiniUDP
         packet.Free();
       this.outgoing.Clear();
     }
+
+    private bool VerifyOpenPeer()
+    {
+      if (this.status != NetPeerStatus.Open)
+      {
+        NetDebug.LogWarning("Activity on closed peer");
+        return false;
+      }
+
+      return true;
+    }
+    #endregion
   }
 }

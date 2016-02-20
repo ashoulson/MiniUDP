@@ -21,18 +21,28 @@ internal class Server
 
     this.netSocket = new NetSocket();
     this.netSocket.Connected += this.OnConnected;
+    this.netSocket.Disconnected += this.OnDisconnected;
+    this.netSocket.TimedOut += this.OnTimedOut;
 
     this.updateClock = new Clock(tickRate);
     updateClock.OnFixedUpdate += this.OnFixedUpdate;
   }
 
-  public void Run()
+  public void Start()
   {
     this.netSocket.Bind(this.port);
     this.updateClock.Start();
+  }
 
-    while (true)
-      this.updateClock.Tick();
+  public void Update()
+  {
+    this.updateClock.Tick();
+  }
+
+  public void Stop()
+  {
+    this.netSocket.Shutdown();
+    this.netSocket.Transmit();
   }
 
   private void OnFixedUpdate()
@@ -43,8 +53,18 @@ internal class Server
 
   private void OnConnected(NetPeer peer)
   {
-    Console.WriteLine("Connected: " + peer.ToString());
+    Console.WriteLine("Connected: " + peer.ToString() + " (" + this.netSocket.PeerCount + ")");
     peer.MessagesWaiting += this.OnPeerMessagesWaiting;
+  }
+
+  private void OnDisconnected(NetPeer peer)
+  {
+    Console.WriteLine("Disconnected: " + peer.ToString() + " (" + this.netSocket.PeerCount + ")");
+  }
+
+  void OnTimedOut(NetPeer peer)
+  {
+    Console.WriteLine("Timed Out: " + peer.ToString() + " (" + this.netSocket.PeerCount + ")");
   }
 
   private void OnPeerMessagesWaiting(NetPeer source)
@@ -53,7 +73,7 @@ internal class Server
     {
       byte sequence = this.buffer[9];
       Console.WriteLine("Received " + sequence + " from " + source.ToString());
-      source.QueueOutgoing(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, sequence }, 10);
+      source.EnqueueSend(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, sequence }, 10);
     }
   }
 }

@@ -7,6 +7,27 @@ class Program
 {
   static void Main(string[] args)
   {
-    new Client("127.0.0.1:44325", 0.02).Run();
+    Client client = new Client("127.0.0.1:44325", 0.02);
+    client.Start();
+
+    while(true)
+    {
+      client.Update();
+
+
+      if (Console.KeyAvailable)
+      {
+        ConsoleKeyInfo key = Console.ReadKey(true);
+        switch (key.Key)
+        {
+          case ConsoleKey.F1:
+            client.Stop();
+            return;
+
+          default:
+            break;
+        }
+      }
+    }
   }
 }

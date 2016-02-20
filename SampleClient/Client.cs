@@ -8,8 +8,6 @@ internal class Client
   private const double HEARTBEAT_RATE = 0.5f;
   private const int BUFFER_SIZE = 2048;
 
-  public event PeerEvent Connected;
-
   private string hostAddress;
   private NetSocket netSocket;
   private Clock updateClock;
@@ -30,18 +28,28 @@ internal class Client
     this.netSocket.UseWhiteList = true;
     this.netSocket.AddToWhiteList(hostAddress);
     this.netSocket.Connected += this.OnConnected;
+    this.netSocket.Disconnected += this.OnDisconnected;
+    this.netSocket.TimedOut += this.OnTimedOut;
 
     this.updateClock = new Clock(tickRate);
     updateClock.OnFixedUpdate += this.OnFixedUpdate;
   }
 
-  public void Run()
+  public void Start()
   {
     this.netSocket.Connect(this.hostAddress);
     this.updateClock.Start();
+  }
 
-    while (true)
-      this.updateClock.Tick();
+  public void Update()
+  {
+    this.updateClock.Tick();
+  }
+
+  public void Stop()
+  {
+    this.netSocket.Shutdown();
+    this.netSocket.Transmit();
   }
 
   private void SendHeartbeat()
@@ -50,7 +58,7 @@ internal class Client
     {
       if ((this.lastHeartbeat + Client.HEARTBEAT_RATE) < Clock.Time)
       {
-        this.serverPeer.QueueOutgoing(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, this.sequence }, 10);
+        this.serverPeer.EnqueueSend(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, this.sequence }, 10);
         this.lastHeartbeat = Clock.Time;
         this.sequence++;
       }
@@ -73,17 +81,24 @@ internal class Client
     peer.MessagesWaiting += this.OnPeerMessagesWaiting;
   }
 
-  private void OnPeerMessagesWaiting(NetPeer source)
+  private void OnDisconnected(NetPeer peer)
   {
-    foreach (int length in source.ReadReceived(this.buffer))
+    Console.WriteLine("Disconnected from server");
+    this.serverPeer = null;
+  }
+
+  private void OnPeerMessagesWaiting(NetPeer peer)
+  {
+    foreach (int length in peer.ReadReceived(this.buffer))
     {
       byte sequence = this.buffer[9];
-      Console.WriteLine("Received " + sequence + " from " + source.ToString());
+      Console.WriteLine("Received " + sequence + " from " + peer.ToString());
     }
   }
 
-  private void OnTimedOut()
+  private void OnTimedOut(NetPeer peer)
   {
-    Console.WriteLine("Timed out");
+    Console.WriteLine("Server connection timed out");
+    this.serverPeer = null;
   }
 }

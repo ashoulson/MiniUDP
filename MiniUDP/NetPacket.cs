@@ -37,15 +37,13 @@ namespace MiniUDP
 
   internal class NetPacket : IPoolable
   {
-    // Max safe MTU is 1500, so we want to allow room for protocol
-    public const int MAX_MESSAGE_SIZE = 1400;
-    internal const int METADATA_SIZE = 2;
-
-    // Add room for the packet type and packet size (2 bytes)
-    internal const int MESSAGE_BUFFER_SIZE = MAX_MESSAGE_SIZE + METADATA_SIZE;
+    // We pack the length and message type into 2 bytes
+    private const int METADATA_SIZE = 2;
+    private const int PACKET_SIZE = 
+      NetConfig.MAX_MESSAGE_SIZE + NetPacket.METADATA_SIZE;
 
     // Mask for separating out the length and packet type data
-    internal const ushort LENGTH_MASK = 0x0FFF;
+    private const ushort LENGTH_MASK = 0x0FFF;
 
     #region IPoolable Members
     Pool IPoolable.Pool { get; set; }
@@ -63,7 +61,7 @@ namespace MiniUDP
       this.packetType = NetPacketType.Invalid;
 
       this.length = 0;
-      this.message = new byte[MESSAGE_BUFFER_SIZE];
+      this.message = new byte[NetConfig.DATA_BUFFER_SIZE];
     }
 
     public void Initialize(NetPacketType type)
@@ -80,7 +78,7 @@ namespace MiniUDP
 
     public int Read(byte[] destinationBuffer)
     {
-      if (destinationBuffer.Length < NetPacket.MESSAGE_BUFFER_SIZE)
+      if (destinationBuffer.Length < NetConfig.MAX_MESSAGE_SIZE)
         throw new ArgumentException("Destination buffer too small");
 
       Array.Copy(this.message, destinationBuffer, this.length);
@@ -89,7 +87,7 @@ namespace MiniUDP
 
     public void Write(byte[] data, int length)
     {
-      if ((length < 0) || (length > MAX_MESSAGE_SIZE))
+      if ((length < 0) || (length > NetConfig.MAX_MESSAGE_SIZE))
         throw new ArgumentOutOfRangeException("Invalid length");
 
       Array.Copy(data, this.message, length);
@@ -103,7 +101,7 @@ namespace MiniUDP
     /// </summary>
     internal bool NetInput(byte[] sourceBuffer, int receivedBytes)
     {
-      if (sourceBuffer.Length < NetPacket.MESSAGE_BUFFER_SIZE)
+      if (sourceBuffer.Length < NetPacket.PACKET_SIZE)
         throw new ArgumentException("Source buffer too small");
 
       int metadata = ((int)sourceBuffer[0] << 8) + sourceBuffer[1];
@@ -132,7 +130,7 @@ namespace MiniUDP
     {
       if (this.packetType == NetPacketType.Invalid)
         throw new InvalidOperationException("Can't send invalid packet");
-      if (destinationBuffer.Length < NetPacket.MESSAGE_BUFFER_SIZE)
+      if (destinationBuffer.Length < NetPacket.PACKET_SIZE)
         throw new ArgumentException("Destination buffer too small");
 
       int metadata = this.length | (ushort)this.packetType;
