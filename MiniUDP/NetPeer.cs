@@ -131,7 +131,7 @@ namespace MiniUDP
     internal bool IsTimedOut()
     {
       double timeoutTime = 
-        this.lastReceivedTime + NetConfig.CONNECTION_TIME_OUT;
+        this.lastReceivedTime + NetConfig.ConnectionTimeOut;
       return timeoutTime < NetTime.Time;
     }
 
