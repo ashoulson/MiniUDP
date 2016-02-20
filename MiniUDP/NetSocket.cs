@@ -69,7 +69,7 @@ namespace MiniUDP
       {
         this.endPoint = endPoint;
         this.lastAttempt = double.NegativeInfinity;
-        this.expireTime = NetTime.Time + NetConfig.CONNECTION_TIME_OUT;
+        this.expireTime = NetTime.Time + NetConfig.ConnectionAttemptTimeOut;
       }
 
       internal void LogAttempt()
@@ -79,7 +79,7 @@ namespace MiniUDP
 
       internal bool TimeToRetry()
       {
-        double nextTime = this.lastAttempt + NetConfig.CONNECTION_RETRY_RATE;
+        double nextTime = this.lastAttempt + NetConfig.ConnectionRetryRate;
         return nextTime < NetTime.Time;
       }
 
