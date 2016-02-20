@@ -45,7 +45,7 @@
     <Compile Include="Util\Common\Pooling\IPoolable.cs" />
     <Compile Include="Util\Common\Pooling\Pool.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Util\NetTime.cs" />
+    <Compile Include="NetTime.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
