@@ -54,7 +54,7 @@ internal class Server
   private void OnConnected(NetPeer peer)
   {
     Console.WriteLine("Connected: " + peer.ToString() + " (" + this.netSocket.PeerCount + ")");
-    peer.MessagesWaiting += this.OnPeerMessagesWaiting;
+    peer.MessagesReady += this.OnPeerMessagesReady;
   }
 
   private void OnDisconnected(NetPeer peer)
@@ -67,7 +67,7 @@ internal class Server
     Console.WriteLine("Timed Out: " + peer.ToString() + " (" + this.netSocket.PeerCount + ")");
   }
 
-  private void OnPeerMessagesWaiting(NetPeer source)
+  private void OnPeerMessagesReady(NetPeer source)
   {
     foreach (int length in source.ReadReceived(this.buffer))
     {

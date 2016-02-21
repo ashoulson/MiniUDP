@@ -35,7 +35,7 @@ namespace MiniUDP
 
   public class NetPeer
   {
-    public event PeerEvent MessagesWaiting;
+    public event PeerEvent MessagesReady;
 
     public object UserData { get; set; }
 
@@ -124,10 +124,10 @@ namespace MiniUDP
       this.received.Enqueue(packet);
     }
 
-    internal void FlagMessagesWaiting()
+    internal void FlagMessagesReady()
     {
-      if ((this.received.Count > 0) && (this.MessagesWaiting != null))
-        this.MessagesWaiting.Invoke(this);
+      if ((this.received.Count > 0) && (this.MessagesReady != null))
+        this.MessagesReady.Invoke(this);
     }
 
     internal bool IsTimedOut()

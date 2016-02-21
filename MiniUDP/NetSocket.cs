@@ -231,7 +231,7 @@ namespace MiniUDP
       List<NetPeer> timedOutPeers = this.GetPeerList();
       foreach (NetPeer peer in this.peers.Values)
       {
-        peer.FlagMessagesWaiting();
+        peer.FlagMessagesReady();
         if (peer.IsTimedOut())
           timedOutPeers.Add(peer);
       }
