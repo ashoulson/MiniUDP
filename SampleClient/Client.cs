@@ -79,7 +79,7 @@ internal class Client
     this.lastHeartbeat = Clock.Time;
     this.serverPeer = peer;
 
-    peer.MessagesWaiting += this.OnPeerMessagesWaiting;
+    peer.MessagesReady += this.OnPeerMessagesReady;
   }
 
   private void OnDisconnected(NetPeer peer)
@@ -88,7 +88,7 @@ internal class Client
     this.serverPeer = null;
   }
 
-  private void OnPeerMessagesWaiting(NetPeer peer)
+  private void OnPeerMessagesReady(NetPeer peer)
   {
     foreach (int length in peer.ReadReceived(this.buffer))
     {
