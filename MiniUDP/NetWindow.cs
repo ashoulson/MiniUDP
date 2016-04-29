@@ -36,21 +36,19 @@ namespace MiniUDP
       int difference = this.latestSequence - sequence;
 
       if (difference == 0)
-      {
         return true;
-      }
       if (difference > 0)
-      {
         return this.SetBit(difference - 1);
-      }
-      else
-      {
-        int offset = -difference;
-        this.Shift(offset);
+
+      int offset = -difference;
+      this.Shift(offset);
+
+      // Store the current sequence if applicable
+      if (offset <= this.numBits)
         this.SetBit(offset - 1);
-        this.latestSequence = sequence;
-        return false;
-      }
+
+      this.latestSequence = sequence;
+      return false;
     }
 
     /// <summary>
