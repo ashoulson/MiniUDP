@@ -10,19 +10,19 @@ class Program
 
     NetWindow window = new NetWindow();
 
-    Console.WriteLine(window.SetBit(0));
-    Console.WriteLine(window.SetBit(7));
-    Console.WriteLine(window.SetBit(31));
-    Console.WriteLine(window.SetBit(127));
+    //Console.WriteLine(window.SetBit(0));
+    //Console.WriteLine(window.SetBit(7));
+    //Console.WriteLine(window.SetBit(31));
+    //Console.WriteLine(window.SetBit(127));
 
-    Console.WriteLine(window.SetBit(0));
-    Console.WriteLine(window.SetBit(7));
-    Console.WriteLine(window.SetBit(31));
-    Console.WriteLine(window.SetBit(127));
+    //Console.WriteLine(window.SetBit(0));
+    //Console.WriteLine(window.SetBit(7));
+    //Console.WriteLine(window.SetBit(31));
+    //Console.WriteLine(window.SetBit(127));
 
-    Console.WriteLine(window);
+    //Console.WriteLine(window);
 
-    window.Shift(33);
+    //window.Shift(33);
 
     Console.WriteLine(window);
 
