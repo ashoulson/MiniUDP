@@ -21,20 +21,46 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 
-namespace CommonTools
+#if UNITY
+using UnityEngine;
+#endif
+
+namespace CommonUtil
 {
-  public class GenericPool<T> : Pool<T>
-    where T : IPoolable, new()
+  public static class UtilDebug
   {
-    public override T Allocate()
+    [Conditional("DEBUG")]
+    public static void LogMessage(object message)
     {
-      if (this.freeList.Count > 0)
-        return this.freeList.Pop();
+      UtilLogger.LogMessage(message);
+    }
 
-      T value = new T();
-      value.Pool = this;
-      return value;
+    [Conditional("DEBUG")]
+    public static void LogWarning(object message)
+    {
+      UtilLogger.LogWarning(message);
+    }
+
+    [Conditional("DEBUG")]
+    public static void LogError(object message)
+    {
+      UtilLogger.LogError(message);
+    }
+
+    [Conditional("DEBUG")]
+    public static void Assert(bool condition)
+    {
+      if (condition == false)
+        UtilLogger.LogWarning("Assert Failed!");
+    }
+
+    [Conditional("DEBUG")]
+    public static void Assert(bool condition, object message)
+    {
+      if (condition == false)
+        UtilLogger.LogWarning("Assert Failed: " + message);
     }
   }
 }

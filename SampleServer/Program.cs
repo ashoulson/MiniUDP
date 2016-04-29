@@ -7,26 +7,46 @@ class Program
 {
   static void Main(string[] args)
   {
-    Server server = new Server(44325, 0.02);
-    server.Start();
 
-    while(true)
-    {
-      server.Update();
+    NetWindow window = new NetWindow();
 
-      if (Console.KeyAvailable)
-      {
-        ConsoleKeyInfo key = Console.ReadKey(true);
-        switch (key.Key)
-        {
-          case ConsoleKey.F1:
-            server.Stop();
-            return;
+    Console.WriteLine(window.SetBit(0));
+    Console.WriteLine(window.SetBit(7));
+    Console.WriteLine(window.SetBit(31));
+    Console.WriteLine(window.SetBit(127));
 
-          default:
-            break;
-        } 
-      }
-    }
+    Console.WriteLine(window.SetBit(0));
+    Console.WriteLine(window.SetBit(7));
+    Console.WriteLine(window.SetBit(31));
+    Console.WriteLine(window.SetBit(127));
+
+    Console.WriteLine(window);
+
+    window.Shift(33);
+
+    Console.WriteLine(window);
+
+    Console.ReadLine();
+    //Server server = new Server(44325);
+    //server.Start();
+
+    //while(true)
+    //{
+    //  server.Update();
+
+    //  if (Console.KeyAvailable)
+    //  {
+    //    ConsoleKeyInfo key = Console.ReadKey(true);
+    //    switch (key.Key)
+    //    {
+    //      case ConsoleKey.F1:
+    //        server.Stop();
+    //        return;
+
+    //      default:
+    //        break;
+    //    } 
+    //  }
+    //}
   }
 }

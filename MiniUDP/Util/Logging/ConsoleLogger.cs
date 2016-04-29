@@ -22,39 +22,38 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 
-namespace CommonTools
+namespace CommonUtil
 {
-  public abstract class Pool
+  public static class ConsoleLogger
   {
-    protected abstract void DeallocateGeneric(object item);
-
-    public static void Free(IPoolable item)
+    public static void Initialize()
     {
-      item.Pool.DeallocateGeneric(item);
-    }
-  }
-
-  public abstract class Pool<T> : Pool
-    where T : IPoolable
-  {
-    protected Stack<T> freeList;
-
-    public Pool()
-    {
-      this.freeList = new Stack<T>();
+      UtilLogger.Message += ConsoleLogger.OnMessage;
+      UtilLogger.Warning += ConsoleLogger.OnWarning;
+      UtilLogger.Error += ConsoleLogger.OnError;
     }
 
-    public abstract T Allocate();
-
-    public void Deallocate(T value)
+    private static void OnMessage(string message)
     {
-      value.Reset();
-      this.freeList.Push(value);
+      Console.WriteLine("LOG: " + message);
     }
 
-    protected override void DeallocateGeneric(object item)
+    private static void OnWarning(string warning)
     {
-      this.Deallocate((T)item);
+      Console.WriteLine(
+        "WARNING: " +
+        warning +
+        "\n" +
+        new System.Diagnostics.StackTrace());
+    }
+
+    private static void OnError(string error)
+    {
+      Console.WriteLine(
+        "ERROR: " +
+        error +
+        "\n" +
+        new System.Diagnostics.StackTrace());
     }
   }
 }
