@@ -21,77 +21,82 @@
 using System;
 using System.Collections.Generic;
 
-using CommonTools;
+using CommonUtil;
 
 namespace MiniUDP
 {
-  internal enum NetPacketType : ushort
+  internal enum NetPacketType : byte
   {
-    Invalid = 0,
+    Invalid =    0x00,
 
-    Connect = 0x1000,    // Fresh connection, requires acknowledgement
-    Connected = 0x2000,  // Acknowledgement of receipt of a connection
-    Disconnect = 0x3000, // Disconnected message, may or may not arrive
-    Message = 0x4000,    // General packet payload holding data
+    Connect =    0x10, // Fresh connection, requires acknowledgement
+    Connected =  0x20, // Acknowledgement of receipt of a connection
+    Disconnect = 0x30, // Disconnected message, may or may not arrive
+    Message =    0x40, // General packet payload holding data
   }
 
-  internal class NetPacket : IPoolable
+  internal class NetPacket : IUtilPoolable<NetPacket>
   {
-    // We pack the length and message type into 2 bytes
-    private const int METADATA_SIZE = 2;
-    private const int PACKET_SIZE = 
-      NetConfig.MAX_MESSAGE_SIZE + NetPacket.METADATA_SIZE;
-
-    // Mask for separating out the length and packet type data
-    private const ushort LENGTH_MASK = 0x0FFF;
-
-    #region IPoolable Members
-    Pool IPoolable.Pool { get; set; }
-    void IPoolable.Reset() { this.Reset(); }
+    #region Pooling
+    IUtilPool<NetPacket> IUtilPoolable<NetPacket>.Pool { get; set; }
+    void IUtilPoolable<NetPacket>.Reset() { this.Reset(); }
     #endregion
 
+    private static ushort ReadUShort(byte[] buffer, int start)
+    {
+      return (ushort)((buffer[start] << 8) | buffer[start + 1]);
+    }
+
+    private static void WriteUShort(byte[] buffer, int start, ushort value)
+    {
+      buffer[start] = (byte)(value >> 8);
+      buffer[start + 1] = (byte)value;
+    }
+
+    public const int HEADER_SIZE = 5;
+    private const int PACKET_SIZE = 
+      NetConfig.MAX_MESSAGE_SIZE + NetPacket.HEADER_SIZE;
+
     internal NetPacketType PacketType { get { return this.packetType; } }
+    internal ushort Ping { get { return this.ping; } }
+    internal ushort Pong { get { return this.pong; } }
+
+    private readonly byte[] message;
 
     private NetPacketType packetType;
     private int length;
-    private byte[] message;
+
+    private ushort ping; // The peer's latest timestamp
+    private ushort pong; // The last timestamp the peer received from us
 
     public NetPacket()
     {
-      this.packetType = NetPacketType.Invalid;
-
-      this.length = 0;
       this.message = new byte[NetConfig.DATA_BUFFER_SIZE];
+      this.Reset();
     }
 
     public void Initialize(NetPacketType type)
     {
+      this.Reset();
       this.packetType = type;
-
-      this.length = 0;
     }
 
-    public void Free()
-    {
-      Pool.Free(this);
-    }
-
-    public int Read(byte[] destinationBuffer)
+    internal int Read(byte[] destinationBuffer)
     {
       if (destinationBuffer.Length < NetConfig.MAX_MESSAGE_SIZE)
         throw new ArgumentException("Destination buffer too small");
-
       Array.Copy(this.message, destinationBuffer, this.length);
       return this.length;
     }
 
-    public void Write(byte[] data, int length)
+    internal void Write(byte[] data, int length, ushort ping, ushort pong)
     {
       if ((length < 0) || (length > NetConfig.MAX_MESSAGE_SIZE))
         throw new ArgumentOutOfRangeException("Invalid length");
-
       Array.Copy(data, this.message, length);
       this.length = length;
+      this.ping = ping;
+      this.pong = pong;
     }
 
     #region Network I/O
@@ -104,23 +109,19 @@ namespace MiniUDP
       if (sourceBuffer.Length < NetPacket.PACKET_SIZE)
         throw new ArgumentException("Source buffer too small");
 
-      int metadata = ((int)sourceBuffer[0] << 8) + sourceBuffer[1];
-      this.packetType = (NetPacketType)(metadata & ~NetPacket.LENGTH_MASK);
-      this.length = metadata & NetPacket.LENGTH_MASK;
+      this.packetType = (NetPacketType)(sourceBuffer[0]);
+      this.ping = NetPacket.ReadUShort(sourceBuffer, 1);
+      this.pong = NetPacket.ReadUShort(sourceBuffer, 3);
 
-      if (receivedBytes == (this.length + NetPacket.METADATA_SIZE))
-      {
-        Array.Copy(
-          sourceBuffer, 
-          NetPacket.METADATA_SIZE, 
-          this.message, 
-          0,
-          this.length);
-        return true;
-      }
+      this.length = receivedBytes - NetPacket.HEADER_SIZE;
+      Array.Copy(
+        sourceBuffer, 
+        NetPacket.HEADER_SIZE, 
+        this.message, 
+        0, 
+        this.length);
 
-      this.packetType = NetPacketType.Invalid;
-      return false;
+      return true;
     }
 
     /// <summary>
@@ -133,18 +134,18 @@ namespace MiniUDP
       if (destinationBuffer.Length < NetPacket.PACKET_SIZE)
         throw new ArgumentException("Destination buffer too small");
 
-      int metadata = this.length | (ushort)this.packetType;
-      destinationBuffer[0] = (byte)(metadata >> 8);
-      destinationBuffer[1] = (byte)metadata;
+      destinationBuffer[0] = (byte)this.packetType;
+      NetPacket.WriteUShort(destinationBuffer, 1, this.ping);
+      NetPacket.WriteUShort(destinationBuffer, 3, this.pong);
 
       Array.Copy(
         this.message, 
         0, 
         destinationBuffer, 
-        NetPacket.METADATA_SIZE, 
+        NetPacket.HEADER_SIZE, 
         this.length);
 
-      return this.length + NetPacket.METADATA_SIZE;
+      return this.length + NetPacket.HEADER_SIZE;
     }
     #endregion
 
@@ -152,6 +153,8 @@ namespace MiniUDP
     {
       this.packetType = NetPacketType.Invalid;
       this.length = 0;
+      this.ping = 0;
+      this.pong = 0;
     }
   }
 }

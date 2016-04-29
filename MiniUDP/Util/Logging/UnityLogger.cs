@@ -1,6 +1,6 @@
 ﻿/*
- *  MiniUDP - A Simple UDP Layer for Shipping and Receiving Byte Arrays
- *  Copyright (c) 2015-2016 - Alexander Shoulson - http://ashoulson.com
+ *  Common Utilities for Working with C# and Unity
+ *  Copyright (c) 2016 - Alexander Shoulson - http://ashoulson.com
  *
  *  This software is provided 'as-is', without any express or implied
  *  warranty. In no event will the authors be held liable for any damages
@@ -18,32 +18,38 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
+#if UNITY
 using System;
-using System.Diagnostics;
+using System.Collections;
+using System.Collections.Generic;
 
-namespace MiniUDP
+using UnityEngine;
+
+namespace CommonUtil
 {
-  public class NetTime
+  public static class UnityLogger
   {
-    /// <summary>
-    /// Compares two timestamps with wrap-around arithmetic
-    /// </summary>
-    public static int StampDifference(ushort a, ushort b)
+    public static void Initialize()
     {
-      int difference = (int)((a << 16) - (b << 16));
-      return difference >> 16;
+      UtilLogger.Message += UnityLogger.OnMessage;
+      UtilLogger.Warning += UnityLogger.OnWarning;
+      UtilLogger.Error += UnityLogger.OnError;
     }
 
-    public uint Second { get { return (uint)(this.stopwatch.ElapsedMilliseconds / 1000U); } }
-    public long Time { get { return (ushort)this.stopwatch.ElapsedMilliseconds; } }
-    public ushort TimeStamp { get { return (ushort)this.stopwatch.ElapsedMilliseconds; } }
-
-    private Stopwatch stopwatch;
-
-    public NetTime()
+    private static void OnMessage(string message)
     {
-      this.stopwatch = new Stopwatch();
-      this.stopwatch.Start();
+      UnityEngine.Debug.Log(message);
+    }
+
+    private static void OnWarning(string warning)
+    {
+      UnityEngine.Debug.LogWarning(warning);
+    }
+
+    private static void OnError(string error)
+    {
+      UnityEngine.Debug.LogError(error);
     }
   }
 }
+#endif

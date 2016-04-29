@@ -22,15 +22,12 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 
-namespace CommonTools
+namespace CommonUtil
 {
-  public interface IPoolable
+  public interface IUtilPoolable<T>
+    where T : IUtilPoolable<T>
   {
-    Pool Pool { get; set; }
-
-    /// <summary>
-    /// Called when this object is deallocated.
-    /// </summary>
+    IUtilPool<T> Pool { get; set; }
     void Reset();
   }
 }

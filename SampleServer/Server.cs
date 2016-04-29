@@ -6,6 +6,7 @@ using MiniUDP;
 internal class Server
 {
   private const int BUFFER_SIZE = 2048;
+  private const float TICK_RATE = 0.02f;
 
   private int port;
   private NetSocket netSocket;
@@ -14,7 +15,7 @@ internal class Server
   // I/O buffer for reading and writing packet data
   private byte[] buffer;
 
-  public Server(int port, double tickRate = 0.02)
+  public Server(int port)
   {
     this.port = port;
     this.buffer = new byte[BUFFER_SIZE];
@@ -24,7 +25,7 @@ internal class Server
     this.netSocket.Disconnected += this.OnDisconnected;
     this.netSocket.TimedOut += this.OnTimedOut;
 
-    this.updateClock = new Clock(tickRate);
+    this.updateClock = new Clock(Server.TICK_RATE);
     updateClock.OnFixedUpdate += this.OnFixedUpdate;
   }
 
@@ -47,6 +48,7 @@ internal class Server
 
   private void OnFixedUpdate()
   {
+    Console.WriteLine(this.netSocket.time.Second);
     this.netSocket.Poll();
     this.netSocket.Transmit();
   }
@@ -72,7 +74,16 @@ internal class Server
     foreach (int length in source.ReadReceived(this.buffer))
     {
       byte sequence = this.buffer[9];
-      Console.WriteLine("Received " + sequence + " from " + source.ToString());
+      //Console.WriteLine(
+      //  "Received " + 
+      //  sequence + 
+      //  " from " + 
+      //  source.ToString() + 
+      //  " " + 
+      //  source.Statistics.GetPing() + 
+      //  "ms " + 
+      //  (source.Statistics.GetLoss(25) * 100.0f) + 
+      //  "%");
       source.EnqueueSend(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, sequence }, 10);
     }
   }

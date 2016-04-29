@@ -23,7 +23,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 
-using CommonTools;
+using CommonUtil;
 
 namespace MiniUDP
 {
@@ -39,6 +39,7 @@ namespace MiniUDP
 
     public object UserData { get; set; }
 
+    public NetStatistics Statistics { get { return this.statistics; } }
     internal IEnumerable<NetPacket> Received { get { return this.received; } }
     internal IEnumerable<NetPacket> Outgoing { get { return this.outgoing; } }
     internal IPEndPoint EndPoint { get { return this.endPoint; } }
@@ -49,10 +50,17 @@ namespace MiniUDP
     private readonly IPEndPoint endPoint;
     private NetPeerStatus status;
 
+    private readonly NetTime time;
     private readonly NetSocket owner;
-    private double lastReceivedTime;
+    private readonly NetStatistics statistics;
 
-    public NetPeer(IPEndPoint endPoint, NetSocket owner)
+    private long lastRecvTime;
+    private ushort lastRecvStamp;
+
+    private bool receivedPacket;
+    private int receivedThisPoll;
+
+    internal NetPeer(NetTime time, IPEndPoint endPoint, NetSocket owner)
     {
       this.UserData = null;
 
@@ -61,8 +69,15 @@ namespace MiniUDP
       this.endPoint = endPoint;
       this.status = NetPeerStatus.Open;
 
+      this.time = time;
       this.owner = owner;
-      this.lastReceivedTime = NetTime.Time;
+      this.statistics = new NetStatistics(time);
+
+      this.lastRecvTime = this.time.Time;
+      this.lastRecvStamp = 0;
+
+      this.receivedPacket = false;
+      this.receivedThisPoll = 0;
     }
 
     public override string ToString()
@@ -80,7 +95,7 @@ namespace MiniUDP
         return;
 
       NetPacket packet = this.owner.AllocatePacket();
-      packet.Write(buffer, length);
+      packet.Write(buffer, length, this.time.TimeStamp, this.lastRecvStamp);
       this.outgoing.Enqueue(packet);
     }
 
@@ -94,7 +109,17 @@ namespace MiniUDP
         yield break;
 
       foreach (NetPacket packet in this.received)
+      {
+        int difference = 
+          NetTime.StampDifference(packet.Ping, this.lastRecvStamp);
+        if ((this.receivedPacket == false) || (difference > 0))
+          this.lastRecvStamp = packet.Ping;
+
+        this.receivedPacket = true;
+        this.statistics.RecordPacket(packet);
+
         yield return packet.Read(buffer);
+      }
     }
 
     /// <summary>
@@ -120,34 +145,39 @@ namespace MiniUDP
 
     internal void AddReceived(NetPacket packet)
     {
-      this.lastReceivedTime = NetTime.Time;
-      this.received.Enqueue(packet);
+      this.lastRecvTime = this.time.Time;
+
+      if (this.received.Count < NetConfig.MAX_PACKETS_PER_PEER)
+        this.received.Enqueue(packet);
+      else
+        UtilDebug.LogWarning("Packet overflow for peer " + this.endPoint);
     }
 
     internal void FlagMessagesReady()
     {
       if ((this.received.Count > 0) && (this.MessagesReady != null))
         this.MessagesReady.Invoke(this);
+      this.receivedThisPoll = 0;
     }
 
     internal bool IsTimedOut()
     {
-      double timeoutTime = 
-        this.lastReceivedTime + NetConfig.ConnectionTimeOut;
-      return timeoutTime < NetTime.Time;
+      double timeoutTime =
+        this.lastRecvTime + NetConfig.CONNECTION_TIME_OUT;
+      return timeoutTime < this.time.Time;
     }
 
     internal void ClearReceived()
     {
       foreach (NetPacket packet in this.received)
-        packet.Free();
+        UtilPool.Free(packet);
       this.received.Clear();
     }
 
     internal void ClearOutgoing()
     {
       foreach (NetPacket packet in this.outgoing)
-        packet.Free();
+        UtilPool.Free(packet);
       this.outgoing.Clear();
     }
 
@@ -155,10 +185,9 @@ namespace MiniUDP
     {
       if (this.status != NetPeerStatus.Open)
       {
-        CommonDebug.LogWarning("Activity on closed peer");
+        UtilDebug.LogWarning("Activity on closed peer");
         return false;
       }
-
       return true;
     }
     #endregion

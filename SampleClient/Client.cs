@@ -5,7 +5,7 @@ using MiniUDP;
 
 internal class Client
 {
-  private const double HEARTBEAT_RATE = 0.5f;
+  private const double HEARTBEAT_RATE = 0.04f;
   private const int BUFFER_SIZE = 2048;
 
   private string hostAddress;
@@ -19,7 +19,7 @@ internal class Client
   private double lastHeartbeat;
   private byte sequence;
 
-  public Client(string hostAddress, double tickRate = 0.02)
+  public Client(string hostAddress, double tickRate = Client.HEARTBEAT_RATE)
   {
     this.hostAddress = hostAddress;
     this.buffer = new byte[BUFFER_SIZE];
