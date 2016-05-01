@@ -42,21 +42,6 @@ namespace MiniUDP
     void IUtilPoolable<NetPacket>.Reset() { this.Reset(); }
     #endregion
 
-    private static ushort Combine(byte high, byte low)
-    {
-      return (ushort)((high << 8) | low);
-    }
-
-    private static byte GetHigh(ushort value)
-    {
-      return (byte)(value >> 8);
-    }
-
-    private static byte GetLow(ushort value)
-    {
-      return (byte)(value);
-    }
-
     public const int HEADER_FULL = 8;
     public const int HEADER_SHORT = 1;
     public const ushort MAX_PROCESS_TIME = 0x0FFF;
