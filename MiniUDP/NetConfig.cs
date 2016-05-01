@@ -34,16 +34,16 @@ namespace MiniUDP
     public const long CONNECTION_ATTEMPT_TIME_OUT = 10000;
 
     /// <summary>
+    /// The maximum message size that a packet can contain, based on known
+    /// MTUs for internet traffic. Don't change this without a good reason.
+    /// </summary>
+    public const int MAX_PAYLOAD_SIZE = 1264;
+
+    /// <summary>
     /// Data buffer size used for packet I/O. 
     /// Don't change this without a good reason.
     /// </summary>
     internal const int DATA_BUFFER_SIZE = 2048;
-
-    /// <summary>
-    /// The maximum message size that a packet can contain, based on known
-    /// MTUs for internet traffic. Don't change this without a good reason.
-    /// </summary>
-    internal const int MAX_PAYLOAD_SIZE = 1264;
 
     /// <summary>
     /// The delay (in ms) before we consider a connection to be spiking after
