@@ -23,7 +23,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 
-using CommonTools;
+using CommonUtil;
 
 namespace MiniUDP
 {
@@ -61,31 +61,34 @@ namespace MiniUDP
     {
       internal IPEndPoint EndPoint { get { return this.endPoint; } }
 
+      private NetTime time;
       private readonly IPEndPoint endPoint;
       private double lastAttempt;
-      private double expireTime;
+      private long expireTime;
 
-      internal PendingConnection(IPEndPoint endPoint)
+      internal PendingConnection(NetTime time, IPEndPoint endPoint)
       {
+        this.time = time;
         this.endPoint = endPoint;
         this.lastAttempt = double.NegativeInfinity;
-        this.expireTime = NetTime.Time + NetConfig.ConnectionAttemptTimeOut;
+        this.expireTime = 
+          this.time.Time + NetConfig.CONNECTION_ATTEMPT_TIME_OUT;
       }
 
       internal void LogAttempt()
       {
-        this.lastAttempt = NetTime.Time;
+        this.lastAttempt = this.time.Time;
       }
 
       internal bool TimeToRetry()
       {
-        double nextTime = this.lastAttempt + NetConfig.ConnectionRetryRate;
-        return nextTime < NetTime.Time;
+        double nextTime = this.lastAttempt + NetConfig.CONNECTION_RETRY_RATE;
+        return (nextTime < this.time.Time);
       }
 
       internal bool HasExpired()
       {
-        return NetTime.Time > this.expireTime;
+        return (this.time.Time > this.expireTime);
       }
     }
 
@@ -100,7 +103,7 @@ namespace MiniUDP
       IPAddress ipaddress = IPAddress.Parse(stringAddress);
       IPEndPoint endpoint = new IPEndPoint(ipaddress, port);
 
-      if (endpoint == null) 
+      if (endpoint == null)
         throw new ArgumentException("Failed to parse address: " + address);
       return endpoint;
     }
@@ -124,24 +127,26 @@ namespace MiniUDP
     public bool UseWhiteList { get; set; }
     public int PeerCount { get { return this.peers.Count; } }
 
-    protected Socket socket;
+    protected readonly Socket socket;
 
-    private byte[] dataBuffer;
-    private GenericPool<NetPacket> packetPool;
-    private Dictionary<IPEndPoint, NetPeer> peers;
-    private Dictionary<IPEndPoint, PendingConnection> pendingConnections;
-    private HashSet<IPAddress> whiteList;
+    public readonly NetTime time;
+    private readonly byte[] dataBuffer;
+    private readonly UtilPool<NetPacket> packetPool;
+    private readonly Dictionary<IPEndPoint, NetPeer> peers;
+    private readonly Dictionary<IPEndPoint, PendingConnection> pendingConnections;
+    private readonly HashSet<IPAddress> whiteList;
 
     // Pre-allocated lists for iteration tasks
-    private List<NetPeer> reusablePeerList;
-    private List<PendingConnection> reusableConnectionList;
+    private readonly List<NetPeer> reusablePeerList;
+    private readonly List<PendingConnection> reusableConnectionList;
     #endregion
 
     #region Constructors
     public NetSocket()
     {
+      this.time = new NetTime();
       this.dataBuffer = new byte[NetConfig.DATA_BUFFER_SIZE];
-      this.packetPool = new GenericPool<NetPacket>();
+      this.packetPool = new UtilPool<NetPacket>();
       this.peers = new Dictionary<IPEndPoint, NetPeer>();
       this.pendingConnections = new Dictionary<IPEndPoint, PendingConnection>();
       this.whiteList = new HashSet<IPAddress>();
@@ -180,9 +185,9 @@ namespace MiniUDP
       catch (SocketException exception)
       {
         if (exception.ErrorCode == 10048)
-          CommonDebug.LogError("Port " + port + " unavailable!");
+          UtilDebug.LogError("Port " + port + " unavailable!");
         else
-          CommonDebug.LogError(exception.Message);
+          UtilDebug.LogError(exception.Message);
         return;
       }
     }
@@ -195,7 +200,9 @@ namespace MiniUDP
     {
       IPEndPoint endPoint = NetSocket.StringToEndPoint(address);
       if (this.peers.ContainsKey(endPoint) == false)
-        this.pendingConnections.Add(endPoint, new PendingConnection(endPoint));
+        this.pendingConnections.Add(
+          endPoint, 
+          new PendingConnection(this.time, endPoint));
     }
 
     /// <summary>
@@ -210,10 +217,13 @@ namespace MiniUDP
     /// Called at the beginning of processing. Reads all incoming data,
     /// processes it, and assigns packets to the peers it received them from.
     /// </summary>
-    public void Poll()
+    public void Receive()
     {
-      while (this.CanReceive())
+      for (int i = 0; i < NetConfig.MAX_PACKET_READS; i++)
       {
+        if (this.CanReceive() == false)
+          break;
+
         IPEndPoint source;
         NetPacket packet = this.TryReceive(out source);
 
@@ -223,10 +233,18 @@ namespace MiniUDP
           if (this.peers.TryGetValue(source, out sourcePeer))
             sourcePeer.AddReceived(packet);
           else
-            CommonDebug.LogWarning(
-              "Message from unrecognized peer: " + source);
+            UtilDebug.LogWarning("Message from unrecognized peer: " + source);
         }
       }
+    }
+
+    /// <summary>
+    /// Updates all peers, sending notifications of received messages or 
+    /// timeouts. Timeouts occur after all message notifications.
+    /// </summary>
+    public void Poll()
+    {
+      this.RetryConnections();
 
       List<NetPeer> timedOutPeers = this.GetPeerList();
       foreach (NetPeer peer in this.peers.Values)
@@ -251,17 +269,15 @@ namespace MiniUDP
     /// </summary>
     public void Transmit()
     {
-      this.RetryConnections();
-
       List<NetPeer> closedPeers = this.GetPeerList();
       foreach (NetPeer peer in this.peers.Values)
       {
-        foreach (NetPacket packet in peer.Outgoing)
+        while (peer.Outgoing.Count > 0)
+        {
+          NetPacket packet = peer.Outgoing.Dequeue();
           this.TrySend(packet, peer.EndPoint);
-
-        // Clean all incoming and outgoing packets
-        peer.ClearOutgoing();
-        peer.ClearReceived();
+          UtilPool.Free(packet);
+        }
 
         if (peer.Status == NetPeerStatus.Closed)
           closedPeers.Add(peer);
@@ -292,8 +308,7 @@ namespace MiniUDP
     /// Allocates a packet from the pool for use in transmission. Packets
     /// will be automatically freed after send -- no need to do it manually.
     /// </summary>
-    internal NetPacket AllocatePacket(
-      NetPacketType packetType = NetPacketType.Message)
+    internal NetPacket AllocatePacket(NetPacketType packetType)
     {
       NetPacket packet = this.packetPool.Allocate();
       packet.Initialize(packetType);
@@ -311,9 +326,9 @@ namespace MiniUDP
       {
         if (pending.TimeToRetry())
         {
-          this.TrySend(
-            this.AllocatePacket(NetPacketType.Connect),
-            pending.EndPoint);
+          NetPacket packet = this.AllocatePacket(NetPacketType.Connect);
+          this.TrySend(packet, pending.EndPoint);
+          UtilPool.Free(packet);
           pending.LogAttempt();
         }
         else if (pending.HasExpired())
@@ -356,7 +371,7 @@ namespace MiniUDP
           return true;
 
         default:
-          CommonDebug.LogWarning("Invalid packet type for server");
+          UtilDebug.LogWarning("Invalid packet type for server");
           return false;
       }
     }
@@ -393,7 +408,7 @@ namespace MiniUDP
       }
       else
       {
-        CommonDebug.LogWarning("Disconnection from unknown source");
+        UtilDebug.LogWarning("Disconnection from unknown source");
       }
     }
 
@@ -410,7 +425,7 @@ namespace MiniUDP
       if (this.whiteList.Contains(source.Address))
         return true;
 
-      CommonDebug.LogWarning("Unrecognized connection: " + source.Address);
+      UtilDebug.LogWarning("Unrecognized connection: " + source.Address);
       return false;
     }
 
@@ -420,7 +435,8 @@ namespace MiniUDP
       NetPeer peer = this.GetPeer(source);
       if (peer == null)
       {
-        peer = new NetPeer(source, this);
+        // Peers aren't made frequently enough to bother pooling them
+        peer = new NetPeer(this.time, source, this);
         this.AddPeer(peer);
 
         if (this.Connected != null)
@@ -463,18 +479,18 @@ namespace MiniUDP
       try
       {
         EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
-        int receiveCount = 
+        int receivedBytes =
           this.socket.ReceiveFrom(
             this.dataBuffer,
-            this.dataBuffer.Length, 
-            SocketFlags.None, 
+            this.dataBuffer.Length,
+            SocketFlags.None,
             ref endPoint);
 
-        if (receiveCount > 0)
+        if (receivedBytes > 0)
         {
           source = endPoint as IPEndPoint;
           NetPacket packet = this.packetPool.Allocate();
-          if (packet.NetInput(this.dataBuffer, receiveCount))
+          if (packet.NetInput(this.dataBuffer, receivedBytes))
             return packet;
         }
 
@@ -497,11 +513,11 @@ namespace MiniUDP
       try
       {
         int bytesToSend = packet.NetOutput(this.dataBuffer);
-        int bytesSent = 
+        int bytesSent =
           this.socket.SendTo(
             this.dataBuffer,
-            bytesToSend, 
-            SocketFlags.None, 
+            bytesToSend,
+            SocketFlags.None,
             destination);
 
         return (bytesSent == bytesToSend);
@@ -527,7 +543,7 @@ namespace MiniUDP
       }
       catch
       {
-        CommonDebug.LogWarning(
+        UtilDebug.LogWarning(
           "Failed to set control code for ignoring ICMP port unreachable.");
       }
     }

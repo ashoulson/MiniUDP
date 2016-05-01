@@ -23,7 +23,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 
-using CommonTools;
+using CommonUtil;
 
 namespace MiniUDP
 {
@@ -39,8 +39,8 @@ namespace MiniUDP
 
     public object UserData { get; set; }
 
-    internal IEnumerable<NetPacket> Received { get { return this.received; } }
-    internal IEnumerable<NetPacket> Outgoing { get { return this.outgoing; } }
+    internal Queue<NetPacket> Received { get { return this.received; } }
+    internal Queue<NetPacket> Outgoing { get { return this.outgoing; } }
     internal IPEndPoint EndPoint { get { return this.endPoint; } }
     internal NetPeerStatus Status { get { return this.status; } }
 
@@ -49,10 +49,14 @@ namespace MiniUDP
     private readonly IPEndPoint endPoint;
     private NetPeerStatus status;
 
+    private readonly NetTime time;
     private readonly NetSocket owner;
-    private double lastReceivedTime;
+    private readonly NetTraffic traffic;
 
-    public NetPeer(IPEndPoint endPoint, NetSocket owner)
+    internal NetPeer(
+      NetTime time, 
+      IPEndPoint endPoint, 
+      NetSocket owner)
     {
       this.UserData = null;
 
@@ -61,13 +65,29 @@ namespace MiniUDP
       this.endPoint = endPoint;
       this.status = NetPeerStatus.Open;
 
+      this.time = time;
       this.owner = owner;
-      this.lastReceivedTime = NetTime.Time;
+      this.traffic = new NetTraffic(time);
     }
 
     public override string ToString()
     {
       return this.EndPoint.ToString();
+    }
+
+    public float GetPing()
+    {
+      return this.traffic.GetPing();
+    }
+
+    public float GetLocalLoss()
+    {
+      return this.traffic.LocalLoss;
+    }
+
+    public float GetRemoteLoss()
+    {
+      return this.traffic.RemoteLoss;
     }
 
     /// <summary>
@@ -79,22 +99,29 @@ namespace MiniUDP
       if (this.VerifyOpenPeer() == false)
         return;
 
-      NetPacket packet = this.owner.AllocatePacket();
-      packet.Write(buffer, length);
+      NetPacket packet = this.owner.AllocatePacket(NetPacketType.Message);
+
+      this.traffic.WriteMetadata(packet);
+      packet.PayloadIn(buffer, length);
       this.outgoing.Enqueue(packet);
     }
 
     /// <summary>
-    /// Iterates over all received messages, writing to the buffer and
-    /// returning the length in bytes for each one.
+    /// Iterates over all received messages, writing the payload to the 
+    /// buffer and returning the length in bytes for each one.
     /// </summary>
     public IEnumerable<int> ReadReceived(byte[] buffer)
     {
       if (this.VerifyOpenPeer() == false)
         yield break;
 
-      foreach (NetPacket packet in this.received)
-        yield return packet.Read(buffer);
+      while (this.received.Count > 0)
+      {
+        NetPacket packet = this.received.Dequeue();
+        int length = packet.PayloadOut(buffer);
+        UtilPool.Free(packet);
+        yield return length;
+      }
     }
 
     /// <summary>
@@ -120,8 +147,14 @@ namespace MiniUDP
 
     internal void AddReceived(NetPacket packet)
     {
-      this.lastReceivedTime = NetTime.Time;
-      this.received.Enqueue(packet);
+      if (packet.PacketType != NetPacketType.Message)
+        throw new InvalidOperationException();
+      this.traffic.LogReceived(packet);
+
+      if (this.received.Count < NetConfig.MAX_PACKETS_PER_PEER)
+        this.received.Enqueue(packet);
+      else
+        UtilDebug.LogWarning("Packet overflow for peer " + this.endPoint);
     }
 
     internal void FlagMessagesReady()
@@ -132,33 +165,18 @@ namespace MiniUDP
 
     internal bool IsTimedOut()
     {
-      double timeoutTime = 
-        this.lastReceivedTime + NetConfig.ConnectionTimeOut;
-      return timeoutTime < NetTime.Time;
-    }
-
-    internal void ClearReceived()
-    {
-      foreach (NetPacket packet in this.received)
-        packet.Free();
-      this.received.Clear();
-    }
-
-    internal void ClearOutgoing()
-    {
-      foreach (NetPacket packet in this.outgoing)
-        packet.Free();
-      this.outgoing.Clear();
+      double timeoutTime =
+        this.traffic.LastRecvTime + NetConfig.CONNECTION_TIME_OUT;
+      return timeoutTime < this.time.Time;
     }
 
     private bool VerifyOpenPeer()
     {
       if (this.status != NetPeerStatus.Open)
       {
-        CommonDebug.LogWarning("Activity on closed peer");
+        UtilDebug.LogWarning("Activity on closed peer");
         return false;
       }
-
       return true;
     }
     #endregion

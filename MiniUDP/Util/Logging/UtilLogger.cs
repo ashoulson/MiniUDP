@@ -20,43 +20,37 @@
 
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 
-namespace CommonTools
+#if UNITY
+using UnityEngine;
+#endif
+
+namespace CommonUtil
 {
-  public static class CommonDebug
+  public static class UtilLogger
   {
-    // TODO: We may want some logging values outside of debug/diagnostics for
-    // release builds. Investigate this possibility.
+    public static event Action<string> Message;
+    public static event Action<string> Warning;
+    public static event Action<string> Error;
 
-    [Conditional("DEBUG")]
-    public static void Log(object message)
+    public static void LogMessage(object message)
     {
-      System.Diagnostics.Debug.Print("LOG: " + message.ToString());
+      if (UtilLogger.Message != null)
+        UtilLogger.Message.Invoke(message.ToString());
     }
 
-    [Conditional("DEBUG")]
-    public static void LogError(object message)
+    public static void LogWarning(object warning)
     {
-      System.Diagnostics.Debug.Print("ERROR: " + message.ToString());
+      if (UtilLogger.Warning != null)
+        UtilLogger.Warning.Invoke(warning.ToString());
     }
 
-    [Conditional("DEBUG")]
-    public static void LogWarning(object message)
+    public static void LogError(object error)
     {
-      System.Diagnostics.Debug.Print("WARNING: " + message.ToString());
-    }
-
-    [Conditional("DEBUG")]
-    public static void Assert(bool condition)
-    {
-      System.Diagnostics.Debug.Assert(condition);
-    }
-
-    [Conditional("DEBUG")]
-    public static void Assert(bool condition, string message)
-    {
-      System.Diagnostics.Debug.Assert(condition, message);
+      if (UtilLogger.Error != null)
+        UtilLogger.Error.Invoke(error.ToString());
     }
   }
 }
