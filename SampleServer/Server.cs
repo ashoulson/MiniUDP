@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Collections.Generic;
 
 using MiniUDP;
@@ -6,7 +7,7 @@ using MiniUDP;
 internal class Server
 {
   private const int BUFFER_SIZE = 2048;
-  private const float TICK_RATE = 0.02f;
+  private const float TICK_RATE = 0.1f;
 
   private int port;
   private NetSocket netSocket;
@@ -37,7 +38,10 @@ internal class Server
 
   public void Update()
   {
+    this.netSocket.Receive();
     this.updateClock.Tick();
+    this.netSocket.Transmit();
+    Thread.Sleep(1);
   }
 
   public void Stop()
@@ -48,9 +52,7 @@ internal class Server
 
   private void OnFixedUpdate()
   {
-    Console.WriteLine(this.netSocket.time.Second);
     this.netSocket.Poll();
-    this.netSocket.Transmit();
   }
 
   private void OnConnected(NetPeer peer)
@@ -74,16 +76,22 @@ internal class Server
     foreach (int length in source.ReadReceived(this.buffer))
     {
       byte sequence = this.buffer[9];
-      //Console.WriteLine(
-      //  "Received " + 
-      //  sequence + 
-      //  " from " + 
-      //  source.ToString() + 
-      //  " " + 
-      //  source.Statistics.GetPing() + 
-      //  "ms " + 
-      //  (source.Statistics.GetLoss(25) * 100.0f) + 
-      //  "%");
+
+      float avgPing = source.GetPing();
+      float avgLocalLoss = source.GetLocalLoss();
+      float avgRemoteLoss = source.GetRemoteLoss();
+
+      Console.WriteLine(
+        "Received " +
+        sequence +
+        " from " +
+        source.ToString() +
+        " " + 
+        avgPing +
+        " " +
+        avgLocalLoss +
+        " " +
+        avgRemoteLoss);
       source.EnqueueSend(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, sequence }, 10);
     }
   }
