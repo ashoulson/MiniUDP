@@ -326,9 +326,9 @@ namespace MiniUDP
       {
         if (pending.TimeToRetry())
         {
-          this.TrySend(
-            this.AllocatePacket(NetPacketType.Connect),
-            pending.EndPoint);
+          NetPacket packet = this.AllocatePacket(NetPacketType.Connect);
+          this.TrySend(packet, pending.EndPoint);
+          UtilPool.Free(packet);
           pending.LogAttempt();
         }
         else if (pending.HasExpired())
