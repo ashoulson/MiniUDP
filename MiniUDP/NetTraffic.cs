@@ -194,6 +194,7 @@ namespace MiniUDP
     internal long LastRecvTime { get { return this.lastRecvTime; } }
     internal long TimeSinceRecv { get { return this.time.Time - this.lastRecvTime; } }
 
+    internal float Ping { get { return this.ComputePing(); } }
     internal float LocalLoss { get { return 1.0f - this.receivedSequences.FillPercent(); } }
     internal float RemoteLoss { get { return this.lastRemoteLoss; } }
 
@@ -236,14 +237,6 @@ namespace MiniUDP
         this.LocalLoss);
     }
 
-    #region Reporting
-    public int GetPing()
-    {
-      if (this.TimeSinceRecv > NetConfig.SPIKE_TIME)
-        return int.MaxValue;
-      return (int)(NetTraffic.Average(this.pingWindow) + 0.5f);
-    }
-
     internal void LogReceived(NetPacket packet)
     {
       this.lastRecvTime = this.time.Time;
@@ -270,6 +263,12 @@ namespace MiniUDP
         this.lastRecvPong = packet.PongStamp;
       }
     }
-    #endregion
+
+    private float ComputePing()
+    {
+      if (this.TimeSinceRecv > NetConfig.SPIKE_TIME)
+        return int.MaxValue;
+      return (int)(NetTraffic.Average(this.pingWindow) + 0.5f);
+    }
   }
 }

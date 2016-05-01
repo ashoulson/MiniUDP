@@ -76,22 +76,17 @@ internal class Server
     foreach (int length in source.ReadReceived(this.buffer))
     {
       byte sequence = this.buffer[9];
-
-      float avgPing = source.GetPing();
-      float avgLocalLoss = source.GetLocalLoss();
-      float avgRemoteLoss = source.GetRemoteLoss();
-
       Console.WriteLine(
         "Received " +
         sequence +
         " from " +
         source.ToString() +
         " " + 
-        avgPing +
+        source.Ping +
         " " +
-        avgLocalLoss +
+        source.LocalLoss +
         " " +
-        avgRemoteLoss);
+        source.RemoteLoss);
       source.EnqueueSend(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, sequence }, 10);
     }
   }

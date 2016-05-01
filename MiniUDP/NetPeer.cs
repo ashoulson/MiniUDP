@@ -38,6 +38,10 @@ namespace MiniUDP
 
     public object UserData { get; set; }
 
+    public float Ping { get { return this.traffic.Ping; } }
+    public float LocalLoss { get { return this.traffic.LocalLoss; } }
+    public float RemoteLoss { get { return this.traffic.RemoteLoss; } }
+
     internal Queue<NetPacket> Received { get { return this.received; } }
     internal Queue<NetPacket> Outgoing { get { return this.outgoing; } }
     internal IPEndPoint EndPoint { get { return this.endPoint; } }
@@ -72,21 +76,6 @@ namespace MiniUDP
     public override string ToString()
     {
       return this.EndPoint.ToString();
-    }
-
-    public float GetPing()
-    {
-      return this.traffic.GetPing();
-    }
-
-    public float GetLocalLoss()
-    {
-      return this.traffic.LocalLoss;
-    }
-
-    public float GetRemoteLoss()
-    {
-      return this.traffic.RemoteLoss;
     }
 
     /// <summary>
