@@ -139,10 +139,14 @@ namespace MiniUDP
         throw new InvalidOperationException();
       this.traffic.LogReceived(packet);
 
+      // We have too many packets queued up, so we need to skip old ones
       if (this.received.Count < NetConfig.MAX_PACKETS_PER_PEER)
-        this.received.Enqueue(packet);
-      else
+      {
         UtilDebug.LogWarning("Packet overflow for peer " + this.endPoint);
+        this.received.Dequeue();
+      }
+
+      this.received.Enqueue(packet);
     }
 
     internal void FlagMessagesReady()

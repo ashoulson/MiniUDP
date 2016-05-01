@@ -217,7 +217,7 @@ namespace MiniUDP
       this.pingWindow = new float[NetConfig.TRAFFIC_WINDOW_LENGTH];
       this.receivedSequences = new SequenceWindow();
 
-      this.lastRecvTime = -1;
+      this.lastRecvTime = time.Time;
       this.lastRecvSequence = 0;
       this.lastRecvPing = 0;
       this.lastRecvPong = 0;

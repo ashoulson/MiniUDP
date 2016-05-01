@@ -33,7 +33,7 @@ namespace MiniUDP
     /// <summary>
     /// Maximum packets we will read from a given peer.
     /// </summary>
-    public const int MAX_PACKETS_PER_PEER = 10;
+    public const int MAX_PACKETS_PER_PEER = 20;
 
     /// <summary>
     /// Rate at which to resend a "Connecting" message when attempting to
