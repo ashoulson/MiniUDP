@@ -140,7 +140,7 @@ namespace MiniUDP
       this.traffic.LogReceived(packet);
 
       // We have too many packets queued up, so we need to skip old ones
-      if (this.received.Count < NetConfig.MAX_PACKETS_PER_PEER)
+      if (this.received.Count >= NetConfig.MAX_PACKETS_PER_PEER)
       {
         UtilDebug.LogWarning("Packet overflow for peer " + this.endPoint);
         this.received.Dequeue();
