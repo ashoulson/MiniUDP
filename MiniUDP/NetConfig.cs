@@ -10,7 +10,7 @@ namespace MiniUDP
     /// <summary>
     /// Maximum packets we will read during a poll.
     /// </summary>
-    public const int MAX_PACKET_READS = 20;
+    public const int MAX_PACKET_READS = 500;
 
     /// <summary>
     /// Maximum packets we will read from a given peer.
@@ -43,6 +43,23 @@ namespace MiniUDP
     /// The maximum message size that a packet can contain, based on known
     /// MTUs for internet traffic. Don't change this without a good reason.
     /// </summary>
-    internal const int MAX_MESSAGE_SIZE = 1271;
+    internal const int MAX_PAYLOAD_SIZE = 1264;
+
+    /// <summary>
+    /// The delay (in ms) before we consider a connection to be spiking after
+    /// receiving no traffic (and report 100% packet loss).
+    /// </summary>
+    internal const long SPIKE_TIME = 2000;
+
+    /// <summary>
+    /// Window size used when computing traffic statistic averages
+    /// </summary>
+    internal const int TRAFFIC_WINDOW_LENGTH = 20;
+
+    /// <summary>
+    /// Number of packets for which to keep a ping history. Should be roughly
+    /// equal to your send rate times the spike seconds, with some tolerance.
+    /// </summary>
+    internal const int PING_HISTORY_LENGTH = 100;
   }
 }

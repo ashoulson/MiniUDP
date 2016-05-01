@@ -217,7 +217,7 @@ namespace MiniUDP
     /// Called at the beginning of processing. Reads all incoming data,
     /// processes it, and assigns packets to the peers it received them from.
     /// </summary>
-    public void Poll()
+    public void Receive()
     {
       for (int i = 0; i < NetConfig.MAX_PACKET_READS; i++)
       {
@@ -236,6 +236,15 @@ namespace MiniUDP
             UtilDebug.LogWarning("Message from unrecognized peer: " + source);
         }
       }
+    }
+
+    /// <summary>
+    /// Updates all peers, sending notifications of received messages or 
+    /// timeouts. Timeouts occur after all message notifications.
+    /// </summary>
+    public void Poll()
+    {
+      this.RetryConnections();
 
       List<NetPeer> timedOutPeers = this.GetPeerList();
       foreach (NetPeer peer in this.peers.Values)
@@ -260,17 +269,15 @@ namespace MiniUDP
     /// </summary>
     public void Transmit()
     {
-      this.RetryConnections();
-
       List<NetPeer> closedPeers = this.GetPeerList();
       foreach (NetPeer peer in this.peers.Values)
       {
-        foreach (NetPacket packet in peer.Outgoing)
+        while (peer.Outgoing.Count > 0)
+        {
+          NetPacket packet = peer.Outgoing.Dequeue();
           this.TrySend(packet, peer.EndPoint);
-
-        // Clean all incoming and outgoing packets
-        peer.ClearOutgoing();
-        peer.ClearReceived();
+          UtilPool.Free(packet);
+        }
 
         if (peer.Status == NetPeerStatus.Closed)
           closedPeers.Add(peer);
@@ -301,8 +308,7 @@ namespace MiniUDP
     /// Allocates a packet from the pool for use in transmission. Packets
     /// will be automatically freed after send -- no need to do it manually.
     /// </summary>
-    internal NetPacket AllocatePacket(
-      NetPacketType packetType = NetPacketType.Message)
+    internal NetPacket AllocatePacket(NetPacketType packetType)
     {
       NetPacket packet = this.packetPool.Allocate();
       packet.Initialize(packetType);
@@ -473,18 +479,18 @@ namespace MiniUDP
       try
       {
         EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
-        int receiveCount =
+        int receivedBytes =
           this.socket.ReceiveFrom(
             this.dataBuffer,
             this.dataBuffer.Length,
             SocketFlags.None,
             ref endPoint);
 
-        if (receiveCount > 0)
+        if (receivedBytes > 0)
         {
           source = endPoint as IPEndPoint;
           NetPacket packet = this.packetPool.Allocate();
-          if (packet.NetInput(this.dataBuffer, receiveCount))
+          if (packet.NetInput(this.dataBuffer, receivedBytes))
             return packet;
         }
 

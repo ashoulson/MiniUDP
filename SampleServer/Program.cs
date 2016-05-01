@@ -5,48 +5,38 @@ using MiniUDP;
 
 class Program
 {
+  enum FooEnum : byte
+  {
+    Invalid = 0x00,
+
+    Connect = 0x10, // Fresh connection, requires acknowledgement
+    Connected = 0x20, // Acknowledgement of receipt of a connection
+    Disconnect = 0x30, // Disconnected message, may or may not arrive
+    Message = 0x40, // General packet payload holding data
+  }
+
   static void Main(string[] args)
   {
+    Server server = new Server(44325);
+    server.Start();
 
-    NetWindow window = new NetWindow();
+    while (true)
+    {
+      server.Update();
 
-    //Console.WriteLine(window.SetBit(0));
-    //Console.WriteLine(window.SetBit(7));
-    //Console.WriteLine(window.SetBit(31));
-    //Console.WriteLine(window.SetBit(127));
+      if (Console.KeyAvailable)
+      {
+        ConsoleKeyInfo key = Console.ReadKey(true);
+        switch (key.Key)
+        {
+          case ConsoleKey.F1:
+            server.Stop();
+            return;
 
-    //Console.WriteLine(window.SetBit(0));
-    //Console.WriteLine(window.SetBit(7));
-    //Console.WriteLine(window.SetBit(31));
-    //Console.WriteLine(window.SetBit(127));
-
-    //Console.WriteLine(window);
-
-    //window.Shift(33);
-
-    Console.WriteLine(window);
-
-    Console.ReadLine();
-    //Server server = new Server(44325);
-    //server.Start();
-
-    //while(true)
-    //{
-    //  server.Update();
-
-    //  if (Console.KeyAvailable)
-    //  {
-    //    ConsoleKeyInfo key = Console.ReadKey(true);
-    //    switch (key.Key)
-    //    {
-    //      case ConsoleKey.F1:
-    //        server.Stop();
-    //        return;
-
-    //      default:
-    //        break;
-    //    } 
-    //  }
-    //}
+          default:
+            break;
+        }
+      }
+    }
   }
 }

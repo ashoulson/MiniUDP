@@ -1,11 +1,12 @@
 ﻿using System;
+using System.Threading;
 using System.Collections.Generic;
 
 using MiniUDP;
 
 internal class Client
 {
-  private const double HEARTBEAT_RATE = 0.04f;
+  private const double HEARTBEAT_RATE = 0.1f;
   private const int BUFFER_SIZE = 2048;
 
   private string hostAddress;
@@ -44,7 +45,10 @@ internal class Client
 
   public void Update()
   {
+    this.netSocket.Receive();
     this.updateClock.Tick();
+    this.netSocket.Transmit();
+    Thread.Sleep(1);
   }
 
   public void Stop()
@@ -70,7 +74,6 @@ internal class Client
   {
     this.netSocket.Poll();
     this.SendHeartbeat();
-    this.netSocket.Transmit();
   }
 
   private void OnConnected(NetPeer peer)

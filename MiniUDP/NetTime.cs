@@ -25,17 +25,8 @@ namespace MiniUDP
 {
   public class NetTime
   {
-    /// <summary>
-    /// Compares two timestamps with wrap-around arithmetic
-    /// </summary>
-    public static int StampDifference(ushort a, ushort b)
-    {
-      int difference = (int)((a << 16) - (b << 16));
-      return difference >> 16;
-    }
-
     public uint Second { get { return (uint)(this.stopwatch.ElapsedMilliseconds / 1000U); } }
-    public long Time { get { return (ushort)this.stopwatch.ElapsedMilliseconds; } }
+    public long Time { get { return this.stopwatch.ElapsedMilliseconds; } }
     public ushort TimeStamp { get { return (ushort)this.stopwatch.ElapsedMilliseconds; } }
 
     private Stopwatch stopwatch;
