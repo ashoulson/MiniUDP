@@ -18,8 +18,11 @@ Wishlist:
 - Encryption and authentication
 
 Not Supported:
-- Reliability/sequencing (all packets received are sent to the application, even duplicates)
-- Data serialization
+- Reliability
+- Fragmentation/reassembly (MiniUDP enforces a hard MTU for its payload size)
+- Reordering or duplicate removal (all packets received are sent to the application in receipt order)
+- Data serialization (MiniUDP expects a byte[] array)
+- RPCs
 
 Primary Design Features of MiniUDP:
 - **No thread requirements.** MiniUDP is designed with small, single process architectures in mind (like those of a 1-core cloud VPS). MiniUDP does not create any threads, and is designed to work in a threadless architecture, though it can be run on its own thread if desired.
