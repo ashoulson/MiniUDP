@@ -66,12 +66,12 @@ namespace MiniUDP
       }
     }
 
-    private readonly byte[] dataBuffer;
+    private readonly NetByteBuffer dataBuffer;
     private readonly Socket socket;
 
-    private NetSocketIO(Socket socket)
+    internal NetSocketIO(Socket socket)
     {
-      this.dataBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
+      this.dataBuffer = new NetByteBuffer(NetConfig.SOCKET_BUFFER_SIZE);
       this.socket = socket;
     }
 
@@ -105,14 +105,12 @@ namespace MiniUDP
     /// Attempts to read from OS socket. Returns false if the read fails
     /// or if there is nothing to read.
     /// </summary>
-    private bool TryReceive(
+    internal bool TryReceive(
       out IPEndPoint source,
-      out byte[] data,
-      out int receivedBytes)
+      out NetByteBuffer buffer)
     {
       source = null;
-      data = null;
-      receivedBytes = 0;
+      buffer = null;
 
       if (this.socket.Poll(0, SelectMode.SelectRead) == false)
         return false;
@@ -120,17 +118,20 @@ namespace MiniUDP
       try
       {
         EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
-        receivedBytes =
+        this.dataBuffer.Reset();
+
+        int receivedBytes =
           this.socket.ReceiveFrom(
-            this.dataBuffer,
-            this.dataBuffer.Length,
+            this.dataBuffer.rawData,
+            this.dataBuffer.rawData.Length,
             SocketFlags.None,
             ref endPoint);
+        this.dataBuffer.length = receivedBytes;
 
         if (receivedBytes > 0)
         {
           source = endPoint as IPEndPoint;
-          data = this.dataBuffer;
+          buffer = this.dataBuffer;
           return true;
         }
 
@@ -148,21 +149,22 @@ namespace MiniUDP
     /// Attempts to send data to endpoint via OS socket. 
     /// Returns false if the send failed.
     /// </summary>
-    private bool TrySend(
+    internal bool TrySend(
       IPEndPoint destination,
-      byte[] data,
-      int sendBytes)
+      INetSendable packet)
     {
+      this.dataBuffer.Reset();
+      packet.Write(this.dataBuffer);
+
       try
       {
         int bytesSent =
           this.socket.SendTo(
-            data,
-            sendBytes,
+            this.dataBuffer.rawData,
+            this.dataBuffer.length,
             SocketFlags.None,
             destination);
-
-        return (bytesSent == sendBytes);
+        return (bytesSent == this.dataBuffer.length);
       }
       catch (Exception exception)
       {

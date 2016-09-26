@@ -113,8 +113,8 @@ namespace MiniUDP
     public int Length { get { return this.length; } }
     public int Remaining { get { return this.length - this.position; } }
 
-    private readonly byte[] rawData;
-    private int length;
+    internal readonly byte[] rawData;
+    internal int length;
     private int position;
 
     public NetByteBuffer(int capacity)

@@ -23,10 +23,8 @@ using System.Collections.Generic;
 
 namespace MiniUDP
 {
-  internal class NetSessionPacket : INetPoolable<NetSessionPacket>
+  internal class NetSessionPacket : INetSendable
   {
-    void INetPoolable<NetSessionPacket>.Reset() { this.Reset(); }
-
     // Packet Type                           1 Byte
     internal byte remoteLoss;             // 1 Byte
     internal byte notifyAck;              // 1 Byte
@@ -62,7 +60,7 @@ namespace MiniUDP
       this.size = 0;
     }
 
-    private void Reset()
+    internal void Reset()
     {
       this.remoteLoss = 0;
       this.notifyAck = 0;
@@ -73,9 +71,9 @@ namespace MiniUDP
       this.size = 0;
     }
 
-    internal bool TryAddNotification(NetNotification notification)
+    internal bool TryAdd(NetNotification notification)
     {
-      int notificationSize = notification.byteSize;
+      int notificationSize = notification.TotalSize;
       if ((this.size + notificationSize) > NetConfig.MAX_SESSION_DATA_SIZE)
         return false;
 
@@ -84,7 +82,7 @@ namespace MiniUDP
       return true;
     }
 
-    internal void Write(NetByteBuffer destBuffer)
+    public void Write(NetByteBuffer destBuffer)
     {
       destBuffer.Write((byte)NetPacketType.Session);
       destBuffer.Write(this.remoteLoss);

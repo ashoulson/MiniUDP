@@ -35,6 +35,10 @@ namespace MiniUDP
     public const int MAX_NOTIFICATION_DATA_SIZE = MAX_SESSION_DATA_SIZE - NetNotification.NOTIFICATION_HEADER_SIZE;
     #endregion
 
+    #region Counts
+    public const int MAX_PENDING_NOTIFICATIONS = 100;
+    #endregion
+
     /// <summary>
     /// Maximum packets we will read during a poll.
     /// </summary>
@@ -54,7 +58,7 @@ namespace MiniUDP
     /// <summary>
     /// Timeout delay (in ms) for connections with peers.
     /// </summary>
-    public const double CONNECTION_TIME_OUT = 10000;
+    public const long CONNECTION_TIME_OUT = 15000;
 
     /// <summary>
     /// Timeout delay (in ms) attempting to establish a connection with a peer.
