@@ -23,8 +23,16 @@ namespace MiniUDP
   public class NetConfig
   {
     #region Socket Config
-    internal const int DATA_BUFFER_SIZE = 2048;
+    internal const int SOCKET_BUFFER_SIZE = 2048;
     internal const int SOCKET_TTL = 255;
+    #endregion
+
+    #region Packet Sizes
+    public const int MAX_PACKET_SIZE = 1264;
+    public const int MAX_PAYLOAD_DATA_SIZE = MAX_PACKET_SIZE - NetPayloadPacket.PAYLOAD_HEADER_SIZE;
+    public const int MAX_PROTOCOL_DATA_SIZE = MAX_PACKET_SIZE - NetProtocolPacket.PROTOCOL_HEADER_SIZE;
+    public const int MAX_SESSION_DATA_SIZE = MAX_PACKET_SIZE - NetSessionPacket.SESSION_HEADER_SIZE;
+    public const int MAX_NOTIFICATION_DATA_SIZE = MAX_SESSION_DATA_SIZE - NetNotification.NOTIFICATION_HEADER_SIZE;
     #endregion
 
     /// <summary>
@@ -52,24 +60,6 @@ namespace MiniUDP
     /// Timeout delay (in ms) attempting to establish a connection with a peer.
     /// </summary>
     public const long CONNECTION_ATTEMPT_TIME_OUT = 10000;
-
-    /// <summary>
-    /// The maximum message size that a packet can contain, based on known
-    /// MTUs for internet traffic. Don't change this without a good reason.
-    /// </summary>
-    public const int MAX_DATA_SIZE = 1264;
-
-    /// <summary>
-    /// Minimum starting size for a new packet.
-    /// Don't change this without a good reason.
-    /// </summary>
-    internal const int MIN_PACKET_SIZE = 255;
-
-    /// <summary>
-    /// Minimum starting size for a new event.
-    /// Don't change this without a good reason.
-    /// </summary>
-    internal const int BUFFER_START_SIZE = 255;
 
     /// <summary>
     /// The delay (in ms) before we consider a connection to be spiking after

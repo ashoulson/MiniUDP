@@ -9,18 +9,18 @@ namespace MiniUDP
   {
     private readonly Dictionary<IPEndPoint, NetPeer> peers;
 
-    private readonly Queue<NetNotifyData> pending;
-    private readonly Queue<NetNotifyData> processing;
+    private readonly Queue<NetNotification> pending;
+    private readonly Queue<NetNotification> processing;
     private readonly NetSocketIO socket;
 
     public NetSession(NetSocketIO socket)
     {
-      this.pending = new Queue<NetNotifyData>();
-      this.processing = new Queue<NetNotifyData>();
+      this.pending = new Queue<NetNotification>();
+      this.processing = new Queue<NetNotification>();
       this.socket = socket;
     }
 
-    public void AddNotify(NetNotifyData notify)
+    public void AddNotify(NetNotification notify)
     {
       lock (this.pending)
         this.pending.Enqueue(notify);
@@ -36,7 +36,7 @@ namespace MiniUDP
       // Dispatch to peers
       while (this.processing.Count > 0)
       {
-        NetNotifyData notification = this.processing.Dequeue();
+        NetNotification notification = this.processing.Dequeue();
         if ((notification.Target != null) && notification.Target.IsConnected)
           notification.Target.QueueNotification(notification);
       }

@@ -20,64 +20,40 @@
 
 namespace MiniUDP
 {
-  #region Read/Write Interfaces
-  public interface INetDisconnectRead
+  internal class NetProtocolPacket : INetPoolable<NetProtocolPacket>
   {
-    INetByteReader Reason { get; }
-  }
-
-  public interface INetDisconnectWrite
-  {
-    INetByteWriter Reason { get; }
-  }
-  #endregion
-
-  internal class NetProtocolPacket 
-    : INetPoolable<NetProtocolPacket>
-    , INetDisconnectRead
-    , INetDisconnectWrite
-  {
-    #region Interface
     void INetPoolable<NetProtocolPacket>.Reset() { this.Reset(); }
-    INetByteReader INetDisconnectRead.Reason { get { return this.dataBuffer; } }
-    INetByteWriter INetDisconnectWrite.Reason { get { return this.dataBuffer; } }
-    #endregion
 
-    private readonly NetByteBuffer dataBuffer;
-    private NetProtocolType protocolType;
+    // Packet Type                            1 Byte
+    internal NetProtocolType protocolType; // 1 Byte
+    internal const int PROTOCOL_HEADER_SIZE = 2; // Total Bytes
+
+    internal readonly NetByteBuffer reason;
 
     public NetProtocolPacket()
     {
-      this.dataBuffer = new NetByteBuffer();
+      this.reason = new NetByteBuffer(NetConfig.MAX_PROTOCOL_DATA_SIZE);
       this.Reset();
-    }
-
-    private void Initialize(NetProtocolType protocolType)
-    {
-      this.protocolType = protocolType;
-      this.dataBuffer.Reset();
-
-      this.dataBuffer.Write((byte)NetPacketType.Protocol);
-      this.dataBuffer.Write((byte)this.protocolType);
     }
 
     private void Reset()
     {
       this.protocolType = NetProtocolType.INVALID;
-      this.dataBuffer.Reset();
+      this.reason.Reset();
     }
 
-    internal void Load(byte[] source, int sourceLength)
+    internal void Write(NetByteBuffer destBuffer)
     {
-      this.dataBuffer.Load(source, sourceLength);
-
-      this.dataBuffer.ReadByte(); // Skip packet type
-      this.protocolType = (NetProtocolType)this.dataBuffer.ReadByte();
+      destBuffer.Write((byte)NetPacketType.Protocol);
+      destBuffer.Write((byte)this.protocolType);
+      destBuffer.Append(this.reason);
     }
 
-    internal int Store(byte[] destination)
+    internal void Read(NetByteBuffer sourceBuffer)
     {
-      return this.dataBuffer.Store(destination);
+      sourceBuffer.ReadByte(); // Skip packet type
+      this.protocolType = (NetProtocolType)sourceBuffer.ReadByte();
+      sourceBuffer.ExtractRemaining(this.reason);
     }
   }
 }

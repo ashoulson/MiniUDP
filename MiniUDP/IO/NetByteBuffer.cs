@@ -19,12 +19,15 @@
 */
 
 using System;
+using System.Diagnostics;
 using System.Text;
 
 namespace MiniUDP
 {
   public interface INetByteReader
   {
+    int Capacity { get; }
+    int Length { get; }
     int Remaining { get; }
 
     byte PeekByte();
@@ -39,12 +42,13 @@ namespace MiniUDP
     long ReadLong();
     string ReadString();
 
-    void ReadOut(byte[] destinationBuffer);
-    void ReadOut(byte[] destinationBuffer, int count);
+    int Store(byte[] destinationBuffer);
   }
 
   public interface INetByteWriter
   {
+    int Capacity { get; }
+
     void Write(bool value);
     void Write(byte value);
     void Write(short value);
@@ -53,9 +57,9 @@ namespace MiniUDP
     void Write(uint value);
     void Write(long value);
     void Write(ulong value);
-    void Write(string value);
+    void Write(string value, int maxBytes);
 
-    void Write(byte[] sourceBuffer, int sourceLength);
+    void Load(byte[] sourceBuffer, int sourceLength);
   }
 
   public class NetByteBuffer : INetByteReader, INetByteWriter
@@ -105,35 +109,83 @@ namespace MiniUDP
     }
     #endregion
 
+    public int Capacity { get { return this.rawData.Length; } }
+    public int Length { get { return this.length; } }
     public int Remaining { get { return this.length - this.position; } }
 
     private readonly byte[] rawData;
     private int length;
     private int position;
 
-    public NetByteBuffer()
+    public NetByteBuffer(int capacity)
     {
-      this.rawData = new byte[NetConfig.DATA_BUFFER_SIZE];
+      this.rawData = new byte[capacity];
       this.Reset();
-    }
-
-    internal void Load(byte[] source, int sourceLength)
-    {
-      Buffer.BlockCopy(source, 0, this.rawData, 0, sourceLength);
-      this.length = sourceLength;
-      this.position = 0;
-    }
-
-    internal int Store(byte[] destination)
-    {
-      Buffer.BlockCopy(this.rawData, 0, destination, 0, this.length);
-      return this.length;
     }
 
     internal void Reset()
     {
       this.length = 0;
       this.position = 0;
+    }
+
+    private void CheckLength(int increment)
+    {
+      if ((this.length + increment) > this.rawData.Length)
+        throw new OverflowException("length + increment");
+    }
+
+    public void Load(byte[] sourceBuffer, int sourceLength)
+    {
+      if (sourceLength > this.rawData.Length)
+        throw new OverflowException("sourceBuffer");
+
+      Array.Copy(sourceBuffer, this.rawData, sourceLength);
+      this.length += sourceLength;
+    }
+
+    public int Store(byte[] destinationBuffer)
+    {
+      Array.Copy(this.rawData, destinationBuffer, this.length);
+      return this.length;
+    }
+
+    public void Append(NetByteBuffer source)
+    {
+      Buffer.BlockCopy(
+        source.rawData,
+        0,
+        this.rawData,
+        this.length,
+        source.length);
+      this.length += source.length;
+    }
+
+    public void Extract(NetByteBuffer destination, int count)
+    {
+      Buffer.BlockCopy(
+        this.rawData,
+        this.position,
+        destination.rawData,
+        0,
+        count);
+      destination.length = count;
+      this.IncreasePosition(count);
+    }
+
+    public void ExtractRemaining(NetByteBuffer destination)
+    {
+      this.Extract(destination, this.Remaining);
+    }
+
+    /// <summary>
+    /// Prevent reading uninitialized data
+    /// </summary>
+    private void IncreasePosition(int size)
+    {
+      this.position += size;
+      if (this.position > this.length)
+        throw new OverflowException("position");
     }
 
     #region Write
@@ -185,12 +237,16 @@ namespace MiniUDP
       this.length += 8;
     }
 
-    public void Write(string value)
+    public void Write(string value, int maxBytes)
     {
       int stringLength = Encoding.UTF8.GetByteCount(value);
-      if (stringLength > ushort.MaxValue)
-        throw new OverflowException("stringLength");
+      if (stringLength > maxBytes)
+      {
+        stringLength = 0;
+        value = "";
+      }
 
+      this.Write((ushort)stringLength);
       Encoding.UTF8.GetBytes(
         value, 
         0, 
@@ -199,123 +255,77 @@ namespace MiniUDP
         this.length);
       this.length += stringLength;
     }
-
-    public void Write(byte[] sourceBuffer, int sourceLength)
-    {
-      if (sourceLength > this.rawData.Length)
-        throw new OverflowException("sourceBuffer");
-
-      Buffer.BlockCopy(
-        sourceBuffer, 
-        0, 
-        this.rawData,
-        this.length, 
-        sourceLength);
-      this.length += sourceLength;
-    }
     #endregion
 
     #region Read
     public byte PeekByte()
     {
-      this.CheckPosition(1);
       return this.rawData[this.position];
     }
 
     public bool ReadBool()
     {
-      this.CheckPosition(1);
       bool value = this.rawData[this.position] > 0;
-      this.position += 1;
+      this.IncreasePosition(1);
       return value;
     }
 
     public byte ReadByte()
     {
-      this.CheckPosition(1);
       byte value = this.rawData[this.position];
-      this.position += 1;
+      this.IncreasePosition(1);
       return value;
     }
 
     public short ReadShort()
     {
-      this.CheckPosition(2);
       short value = BitConverter.ToInt16(this.rawData, this.position);
-      this.position += 2;
+      this.IncreasePosition(2);
       return value;
     }
 
     public ushort ReadUShort()
     {
-      this.CheckPosition(2);
       ushort value = BitConverter.ToUInt16(this.rawData, this.position);
-      this.position += 2;
+      this.IncreasePosition(2);
       return value;
     }
 
     public int ReadInt()
     {
-      this.CheckPosition(4);
       int value = BitConverter.ToInt32(this.rawData, this.position);
-      this.position += 4;
+      this.IncreasePosition(4);
       return value;
     }
 
     public uint ReadUInt()
     {
-      this.CheckPosition(4);
       uint value = BitConverter.ToUInt32(this.rawData, this.position);
-      this.position += 4;
+      this.IncreasePosition(4);
       return value;
     }
 
     public long ReadLong()
     {
-      this.CheckPosition(8);
       long value = BitConverter.ToInt64(this.rawData, this.position);
-      this.position += 8;
+      this.IncreasePosition(8);
       return value;
     }
 
     public ulong ReadULong()
     {
-      this.CheckPosition(8);
       ulong value = BitConverter.ToUInt64(this.rawData, this.position);
-      this.position += 8;
+      this.IncreasePosition(8);
       return value;
     }
 
     public string ReadString()
     {
-      int bytesCount = this.ReadUShort();
-      this.CheckPosition(bytesCount);
-
-      string result =
-        Encoding.UTF8.GetString(this.rawData, this.position, bytesCount);
-      this.position += bytesCount;
+      int byteCount = this.ReadUShort();
+      string result = 
+        Encoding.UTF8.GetString(this.rawData, this.position, byteCount);
+      this.IncreasePosition(byteCount);
       return result;
-    }
-
-    public void ReadOut(byte[] destinationBuffer)
-    {
-      this.ReadOut(destinationBuffer, this.Remaining);
-    }
-
-    public void ReadOut(byte[] destinationBuffer, int count)
-    {
-      Buffer.BlockCopy(
-        this.rawData, 
-        this.position, 
-        destinationBuffer, 
-        0, 
-        count);
-    }
-
-    private void CheckPosition(int size)
-    {
-      if ((this.position + size) > this.length)
-        throw new OverflowException("position");
     }
     #endregion
   }

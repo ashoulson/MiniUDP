@@ -22,37 +22,24 @@ using System;
 
 namespace MiniUDP
 {
-  internal enum NetEventType : byte
+  internal class NetPacketFactory
   {
-    INVALID = 0,
+    public NetPool<NetNotification> NotificationPool { get { return this.notificationPool; } }
+    public NetPool<NetSessionPacket> SessionPool { get { return this.sessionPool; } }
+    public NetPool<NetPayloadPacket> PayloadPool { get { return this.payloadPool; } }
+    public NetPool<NetProtocolPacket> ProtocolPool { get { return this.protocolPool; } }
 
-    Payload,
-    Message,
-    Error,
+    private readonly NetPool<NetNotification> notificationPool;
+    private readonly NetPool<NetSessionPacket> sessionPool;
+    private readonly NetPool<NetPayloadPacket> payloadPool;
+    private readonly NetPool<NetProtocolPacket> protocolPool;
 
-    COUNT,
-  }
-  
-  public class NetEvent : INetPoolable<NetEvent>
-  {
-    #region Pooling
-    void INetPoolable<NetEvent>.Reset() { this.Reset(); }
-    #endregion
-
-    private NetEventType eventType;
-    private byte[] data;
-    private int dataLength;
-
-    internal NetEvent()
+    internal NetPacketFactory()
     {
-      this.data = new byte[NetConfig.MIN_PACKET_SIZE];
-      this.Reset();
-    }
-
-    private void Reset()
-    {
-      //this.header = default(NetPacketHeader);
-      //this.length = 0;
+      this.notificationPool = new NetPool<NetNotification>();
+      this.sessionPool = new NetPool<NetSessionPacket>();
+      this.payloadPool = new NetPool<NetPayloadPacket>();
+      this.protocolPool = new NetPool<NetProtocolPacket>();
     }
   }
 }
