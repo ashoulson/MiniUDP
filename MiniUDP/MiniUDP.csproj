@@ -36,18 +36,18 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="CommonUtil\Debug\UtilDebug.cs" />
-    <Compile Include="CommonUtil\Logging\ConsoleLogger.cs" />
-    <Compile Include="CommonUtil\Logging\UnityLogger.cs" />
-    <Compile Include="CommonUtil\Logging\UtilLogger.cs" />
-    <Compile Include="CommonUtil\Pooling\IUtilPoolable.cs" />
-    <Compile Include="CommonUtil\Pooling\UtilPool.cs" />
-    <Compile Include="CommonUtil\UtilTools.cs" />
+    <Compile Include="Datagram\NetDatagram.cs" />
     <Compile Include="NetConfig.cs" />
+    <Compile Include="NetDebug.cs" />
+    <Compile Include="NetEvent.cs" />
+    <Compile Include="NetBuffer.cs" />
     <Compile Include="NetPeer.cs" />
     <Compile Include="NetPacket.cs" />
+    <Compile Include="NetPool.cs" />
     <Compile Include="NetSocket.cs" />
+    <Compile Include="NetSocket2.cs" />
     <Compile Include="NetTraffic.cs" />
+    <Compile Include="NetUtil.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="NetTime.cs" />
   </ItemGroup>

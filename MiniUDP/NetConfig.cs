@@ -18,13 +18,15 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
-using System;
-using System.Collections.Generic;
-
 namespace MiniUDP
 {
   public class NetConfig
   {
+    #region Socket Config
+    internal const int DATA_BUFFER_SIZE = 2048;
+    internal const int SOCKET_TTL = 255;
+    #endregion
+
     /// <summary>
     /// Maximum packets we will read during a poll.
     /// </summary>
@@ -55,13 +57,19 @@ namespace MiniUDP
     /// The maximum message size that a packet can contain, based on known
     /// MTUs for internet traffic. Don't change this without a good reason.
     /// </summary>
-    public const int MAX_PAYLOAD_SIZE = 1264;
+    public const int MAX_DATA_SIZE = 1264;
 
     /// <summary>
-    /// Data buffer size used for packet I/O. 
+    /// Minimum starting size for a new packet.
     /// Don't change this without a good reason.
     /// </summary>
-    internal const int DATA_BUFFER_SIZE = 2048;
+    internal const int MIN_PACKET_SIZE = 255;
+
+    /// <summary>
+    /// Minimum starting size for a new event.
+    /// Don't change this without a good reason.
+    /// </summary>
+    internal const int BUFFER_START_SIZE = 255;
 
     /// <summary>
     /// The delay (in ms) before we consider a connection to be spiking after

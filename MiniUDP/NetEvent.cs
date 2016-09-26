@@ -1,5 +1,5 @@
 ﻿/*
- *  Common Utilities for Working with C# and Unity
+ *  MiniUDP - A Simple UDP Layer for Shipping and Receiving Byte Arrays
  *  Copyright (c) 2016 - Alexander Shoulson - http://ashoulson.com
  *
  *  This software is provided 'as-is', without any express or implied
@@ -19,48 +19,40 @@
 */
 
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics;
 
-#if UNITY
-using UnityEngine;
-#endif
-
-namespace CommonUtil
+namespace MiniUDP
 {
-  public static class UtilDebug
+  internal enum NetEventType : byte
   {
-    [Conditional("DEBUG")]
-    public static void LogMessage(object message)
+    INVALID = 0,
+
+    Payload,
+    Message,
+    Error,
+
+    COUNT,
+  }
+  
+  public class NetEvent : INetPoolable<NetEvent>
+  {
+    #region Pooling
+    void INetPoolable<NetEvent>.Reset() { this.Reset(); }
+    #endregion
+
+    private NetEventType eventType;
+    private byte[] data;
+    private int dataLength;
+
+    internal NetEvent()
     {
-      UtilLogger.LogMessage(message);
+      this.data = new byte[NetConfig.MIN_PACKET_SIZE];
+      this.Reset();
     }
 
-    [Conditional("DEBUG")]
-    public static void LogWarning(object message)
+    private void Reset()
     {
-      UtilLogger.LogWarning(message);
-    }
-
-    [Conditional("DEBUG")]
-    public static void LogError(object message)
-    {
-      UtilLogger.LogError(message);
-    }
-
-    [Conditional("DEBUG")]
-    public static void Assert(bool condition)
-    {
-      if (condition == false)
-        UtilLogger.LogWarning("Assert Failed!");
-    }
-
-    [Conditional("DEBUG")]
-    public static void Assert(bool condition, object message)
-    {
-      if (condition == false)
-        UtilLogger.LogWarning("Assert Failed: " + message);
+      //this.header = default(NetPacketHeader);
+      //this.length = 0;
     }
   }
 }
