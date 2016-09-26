@@ -18,48 +18,42 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
-using System.Collections.Generic;
-
 namespace MiniUDP
 {
-  internal interface INetPoolable<T>
-    where T : INetPoolable<T>
+  internal class NetPayloadPacket : INetPoolable<NetPayloadPacket>
   {
-    void Reset();
-  }
+    void INetPoolable<NetPayloadPacket>.Reset() { this.Reset(); }
 
-  internal interface INetPool<T>
-  {
-    T Allocate();
-    void Deallocate(T obj);
-  }
+    // Packet Type                           1 Byte
+    internal byte sequenceId;             // 1 Byte
+    internal const int PAYLOAD_HEADER_SIZE = 2; // Total Bytes
 
-  internal class NetPool<T> : INetPool<T>
-    where T : INetPoolable<T>, new()
-  {
-    private readonly Stack<T> freeList;
+    internal readonly NetByteBuffer userData;
 
-    public NetPool()
+    public NetPayloadPacket()
     {
-      this.freeList = new Stack<T>();
+      this.userData = new NetByteBuffer(NetConfig.MAX_PAYLOAD_DATA_SIZE);
+      this.Reset();
     }
 
-    public T Allocate()
+    private void Reset()
     {
-      lock(this.freeList)
-        if (this.freeList.Count > 0)
-          return this.freeList.Pop();
-
-      T obj = new T();
-      obj.Reset();
-      return obj;
+      this.sequenceId = 0;
+      this.userData.Reset();
     }
 
-    public void Deallocate(T obj)
+    internal void Write(NetByteBuffer destBuffer)
     {
-      obj.Reset();
-      lock(this.freeList)
-        this.freeList.Push(obj);
+      destBuffer.Write((byte)NetPacketType.Payload);
+      destBuffer.Write(this.sequenceId);
+      destBuffer.Append(this.userData);
+    }
+
+    internal void Read(NetByteBuffer sourceBuffer)
+    {
+      sourceBuffer.ReadByte(); // Skip packet type
+      this.sequenceId = sourceBuffer.ReadByte();
+      sourceBuffer.ExtractRemaining(this.userData);
     }
   }
 }

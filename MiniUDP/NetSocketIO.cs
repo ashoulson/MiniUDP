@@ -48,8 +48,8 @@ namespace MiniUDP
     /// </summary>
     private static void ConfigureSocket(Socket socket)
     {
-      socket.ReceiveBufferSize = NetConfig.DATA_BUFFER_SIZE;
-      socket.SendBufferSize = NetConfig.DATA_BUFFER_SIZE;
+      socket.ReceiveBufferSize = NetConfig.SOCKET_BUFFER_SIZE;
+      socket.SendBufferSize = NetConfig.SOCKET_BUFFER_SIZE;
       socket.Blocking = false;
 
       try
@@ -71,7 +71,7 @@ namespace MiniUDP
 
     private NetSocketIO(Socket socket)
     {
-      this.dataBuffer = new byte[NetConfig.DATA_BUFFER_SIZE];
+      this.dataBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
       this.socket = socket;
     }
 

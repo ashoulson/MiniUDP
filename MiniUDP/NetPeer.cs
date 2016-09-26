@@ -39,21 +39,21 @@ namespace MiniUDP
       get { return this.status == NetPeerStatus.Connected; }
     }
 
-    private readonly Queue<NetNotifyData> outgoingNotifications;
+    private readonly Queue<NetNotification> outgoingNotifications;
     private readonly IPEndPoint endPoint;
     private NetPeerStatus status;
 
     internal NetPeer(IPEndPoint endPoint)
     {
       this.endPoint = endPoint;
-      this.outgoingNotifications = new Queue<NetNotifyData>();
+      this.outgoingNotifications = new Queue<NetNotification>();
       this.status = NetPeerStatus.Pending;
     }
 
     /// <summary>
     /// Called on the background session thread.
     /// </summary>
-    internal void QueueNotification(NetNotifyData data)
+    internal void QueueNotification(NetNotification data)
     {
       this.outgoingNotifications.Enqueue(data);
     }
