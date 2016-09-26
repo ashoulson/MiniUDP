@@ -22,155 +22,197 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 
-using CommonUtil;
-
 namespace MiniUDP
 {
   internal enum NetPeerStatus
   {
-    Open,
+    Pending,
+    Connected,
     Closed,
   }
 
   public class NetPeer
   {
-    public event PeerEvent MessagesReady;
-
     public object UserData { get; set; }
+    public bool IsConnected
+    {
+      get { return this.status == NetPeerStatus.Connected; }
+    }
 
-    public float Ping { get { return this.traffic.Ping; } }
-    public float LocalLoss { get { return this.traffic.LocalLoss; } }
-    public float RemoteLoss { get { return this.traffic.RemoteLoss; } }
-
-    internal Queue<NetPacket> Received { get { return this.received; } }
-    internal Queue<NetPacket> Outgoing { get { return this.outgoing; } }
-    internal IPEndPoint EndPoint { get { return this.endPoint; } }
-    internal NetPeerStatus Status { get { return this.status; } }
-
-    private readonly Queue<NetPacket> received;
-    private readonly Queue<NetPacket> outgoing;
+    private readonly Queue<NetNotifyData> outgoingNotifications;
     private readonly IPEndPoint endPoint;
     private NetPeerStatus status;
 
-    private readonly NetTime time;
-    private readonly NetSocket owner;
-    private readonly NetTraffic traffic;
-
-    internal NetPeer(
-      NetTime time, 
-      IPEndPoint endPoint, 
-      NetSocket owner)
+    internal NetPeer(IPEndPoint endPoint)
     {
-      this.UserData = null;
-
-      this.received = new Queue<NetPacket>();
-      this.outgoing = new Queue<NetPacket>();
       this.endPoint = endPoint;
-      this.status = NetPeerStatus.Open;
-
-      this.time = time;
-      this.owner = owner;
-      this.traffic = new NetTraffic(time);
-    }
-
-    public override string ToString()
-    {
-      return this.EndPoint.ToString();
+      this.outgoingNotifications = new Queue<NetNotifyData>();
+      this.status = NetPeerStatus.Pending;
     }
 
     /// <summary>
-    /// Queues data to be sent. The actual send will occur at the socket's
-    /// next Transmit() call.
+    /// Called on the background session thread.
     /// </summary>
-    public void EnqueueSend(byte[] buffer, int length)
+    internal void QueueNotification(NetNotifyData data)
     {
-      if (this.VerifyOpenPeer() == false)
-        return;
-
-      NetPacket packet = this.owner.AllocatePacket(NetPacketType.Message);
-
-      this.traffic.WriteMetadata(packet);
-      packet.PayloadIn(buffer, length);
-      this.outgoing.Enqueue(packet);
+      this.outgoingNotifications.Enqueue(data);
     }
-
-    /// <summary>
-    /// Iterates over all received messages, writing the payload to the 
-    /// buffer and returning the length in bytes for each one.
-    /// </summary>
-    public IEnumerable<int> ReadReceived(byte[] buffer)
-    {
-      if (this.VerifyOpenPeer() == false)
-        yield break;
-
-      while (this.received.Count > 0)
-      {
-        NetPacket packet = this.received.Dequeue();
-        int length = packet.PayloadOut(buffer);
-        UtilPool.Free(packet);
-        yield return length;
-      }
-    }
-
-    /// <summary>
-    /// Closes the connection and queues a disconnect message to send.
-    /// Note that this message will be sent at the next socket Transmit().
-    /// </summary>
-    public void Close()
-    {
-      this.AddOutgoing(this.owner.AllocatePacket(NetPacketType.Disconnect));
-      this.status = NetPeerStatus.Closed;
-    }
-
-    #region Internal Helpers
-    internal void SilentClose()
-    {
-      this.status = NetPeerStatus.Closed;
-    }
-
-    internal void AddOutgoing(NetPacket packet)
-    {
-      this.outgoing.Enqueue(packet);
-    }
-
-    internal void AddReceived(NetPacket packet)
-    {
-      if (packet.PacketType != NetPacketType.Message)
-        throw new InvalidOperationException();
-      this.traffic.LogReceived(packet);
-
-      // We have too many packets queued up, so we need to skip old ones
-      if (this.received.Count >= NetConfig.MAX_PACKETS_PER_PEER)
-      {
-        UtilDebug.LogWarning("Packet overflow for peer " + this.endPoint);
-        this.received.Dequeue();
-      }
-
-      this.received.Enqueue(packet);
-    }
-
-    internal void FlagMessagesReady()
-    {
-      if ((this.received.Count > 0) && (this.MessagesReady != null))
-        this.MessagesReady.Invoke(this);
-    }
-
-    internal bool IsTimedOut()
-    {
-      double timeoutTime =
-        this.traffic.LastRecvTime + NetConfig.CONNECTION_TIME_OUT;
-      return timeoutTime < this.time.Time;
-    }
-
-    private bool VerifyOpenPeer()
-    {
-      if (this.status != NetPeerStatus.Open)
-      {
-        UtilDebug.LogWarning("Activity on closed peer");
-        return false;
-      }
-      return true;
-    }
-    #endregion
   }
 }
+
+//using System;
+//using System.Collections.Generic;
+//using System.Net;
+
+//using CommonUtil;
+
+//namespace MiniUDP
+//{
+//  internal enum NetPeerStatus
+//  {
+//    Open,
+//    Closed,
+//  }
+
+//  public class NetPeer
+//  {
+//    public event PeerEvent MessagesReady;
+
+//    public object UserData { get; set; }
+
+//    public float Ping { get { return this.traffic.Ping; } }
+//    public float LocalLoss { get { return this.traffic.LocalLoss; } }
+//    public float RemoteLoss { get { return this.traffic.RemoteLoss; } }
+
+//    internal Queue<NetPacket> Received { get { return this.received; } }
+//    internal Queue<NetPacket> Outgoing { get { return this.outgoing; } }
+//    internal IPEndPoint EndPoint { get { return this.endPoint; } }
+//    internal NetPeerStatus Status { get { return this.status; } }
+
+//    private readonly Queue<NetPacket> received;
+//    private readonly Queue<NetPacket> outgoing;
+//    private readonly IPEndPoint endPoint;
+//    private NetPeerStatus status;
+
+//    private readonly NetTime time;
+//    private readonly NetSocket owner;
+//    private readonly NetTraffic traffic;
+
+//    internal NetPeer(
+//      NetTime time, 
+//      IPEndPoint endPoint, 
+//      NetSocket owner)
+//    {
+//      this.UserData = null;
+
+//      this.received = new Queue<NetPacket>();
+//      this.outgoing = new Queue<NetPacket>();
+//      this.endPoint = endPoint;
+//      this.status = NetPeerStatus.Open;
+
+//      this.time = time;
+//      this.owner = owner;
+//      this.traffic = new NetTraffic(time);
+//    }
+
+//    public override string ToString()
+//    {
+//      return this.EndPoint.ToString();
+//    }
+
+//    /// <summary>
+//    /// Queues data to be sent. The actual send will occur at the socket's
+//    /// next Transmit() call.
+//    /// </summary>
+//    public void EnqueueSend(byte[] buffer, int length)
+//    {
+//      if (this.VerifyOpenPeer() == false)
+//        return;
+
+//      NetPacket packet = this.owner.AllocatePacket(NetPacketType.Payload);
+
+//      this.traffic.WriteMetadata(packet);
+//      packet.PayloadIn(buffer, length);
+//      this.outgoing.Enqueue(packet);
+//    }
+
+//    /// <summary>
+//    /// Iterates over all received messages, writing the payload to the 
+//    /// buffer and returning the length in bytes for each one.
+//    /// </summary>
+//    public IEnumerable<int> ReadReceived(byte[] buffer)
+//    {
+//      if (this.VerifyOpenPeer() == false)
+//        yield break;
+
+//      while (this.received.Count > 0)
+//      {
+//        NetPacket packet = this.received.Dequeue();
+//        int length = packet.PayloadOut(buffer);
+//        UtilPool.Free(packet);
+//        yield return length;
+//      }
+//    }
+
+//    /// <summary>
+//    /// Closes the connection and queues a disconnect message to send.
+//    /// Note that this message will be sent at the next socket Transmit().
+//    /// </summary>
+//    public void Close()
+//    {
+//      this.AddOutgoing(this.owner.AllocatePacket(NetPacketType.Disconnect));
+//      this.status = NetPeerStatus.Closed;
+//    }
+
+//    #region Internal Helpers
+//    internal void SilentClose()
+//    {
+//      this.status = NetPeerStatus.Closed;
+//    }
+
+//    internal void AddOutgoing(NetPacket packet)
+//    {
+//      this.outgoing.Enqueue(packet);
+//    }
+
+//    internal void AddReceived(NetPacket packet)
+//    {
+//      if (packet.PacketType != NetPacketType.Payload)
+//        throw new InvalidOperationException();
+//      this.traffic.LogReceived(packet);
+
+//      // We have too many packets queued up, so we need to skip old ones
+//      if (this.received.Count >= NetConfig.MAX_PACKETS_PER_PEER)
+//      {
+//        UtilDebug.LogWarning("Packet overflow for peer " + this.endPoint);
+//        this.received.Dequeue();
+//      }
+
+//      this.received.Enqueue(packet);
+//    }
+
+//    internal void FlagMessagesReady()
+//    {
+//      if ((this.received.Count > 0) && (this.MessagesReady != null))
+//        this.MessagesReady.Invoke(this);
+//    }
+
+//    internal bool IsTimedOut()
+//    {
+//      double timeoutTime =
+//        this.traffic.LastRecvTime + NetConfig.CONNECTION_TIME_OUT;
+//      return timeoutTime < this.time.Time;
+//    }
+
+//    private bool VerifyOpenPeer()
+//    {
+//      if (this.status != NetPeerStatus.Open)
+//      {
+//        UtilDebug.LogWarning("Activity on closed peer");
+//        return false;
+//      }
+//      return true;
+//    }
+//    #endregion
+//  }
+//}

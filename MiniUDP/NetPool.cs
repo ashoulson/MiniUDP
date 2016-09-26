@@ -1,5 +1,5 @@
 ﻿/*
- *  Common Utilities for Working with C# and Unity
+ *  MiniUDP - A Simple UDP Layer for Shipping and Receiving Byte Arrays
  *  Copyright (c) 2016 - Alexander Shoulson - http://ashoulson.com
  *
  *  This software is provided 'as-is', without any express or implied
@@ -18,42 +18,55 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
-using System;
-using System.Collections;
 using System.Collections.Generic;
 
-namespace CommonUtil
+namespace MiniUDP
 {
-  public static class ConsoleLogger
+  internal interface INetPoolable<T>
+    where T : INetPoolable<T>
   {
-    public static void Initialize()
+    void Reset();
+  }
+
+  internal interface INetPool<T>
+  {
+    T Allocate();
+    void Deallocate(T obj);
+    INetPool<T> Clone();
+  }
+
+  internal class NetPool<T> : INetPool<T>
+    where T : INetPoolable<T>, new()
+  {
+    private readonly Stack<T> freeList;
+
+    public NetPool()
     {
-      UtilLogger.Message += ConsoleLogger.OnMessage;
-      UtilLogger.Warning += ConsoleLogger.OnWarning;
-      UtilLogger.Error += ConsoleLogger.OnError;
+      this.freeList = new Stack<T>();
     }
 
-    private static void OnMessage(string message)
+    public T Allocate()
     {
-      Console.WriteLine("LOG: " + message);
+      lock(this.freeList)
+        if (this.freeList.Count > 0)
+          return this.freeList.Pop();
+
+      T obj = new T();
+      obj.Reset();
+      return obj;
     }
 
-    private static void OnWarning(string warning)
+    public void Deallocate(T obj)
     {
-      Console.WriteLine(
-        "WARNING: " +
-        warning +
-        "\n" +
-        new System.Diagnostics.StackTrace());
+      obj.Reset();
+
+      lock(this.freeList)
+        this.freeList.Push(obj);
     }
 
-    private static void OnError(string error)
+    public INetPool<T> Clone()
     {
-      Console.WriteLine(
-        "ERROR: " +
-        error +
-        "\n" +
-        new System.Diagnostics.StackTrace());
+      return new NetPool<T>();
     }
   }
 }

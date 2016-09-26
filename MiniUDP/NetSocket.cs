@@ -71,7 +71,7 @@ namespace MiniUDP
         this.time = time;
         this.endPoint = endPoint;
         this.lastAttempt = double.NegativeInfinity;
-        this.expireTime = 
+        this.expireTime =
           this.time.Time + NetConfig.CONNECTION_ATTEMPT_TIME_OUT;
       }
 
@@ -131,7 +131,7 @@ namespace MiniUDP
 
     public readonly NetTime time;
     private readonly byte[] dataBuffer;
-    private readonly UtilPool<NetPacket> packetPool;
+    private readonly NetPool<NetPacket> packetPool;
     private readonly Dictionary<IPEndPoint, NetPeer> peers;
     private readonly Dictionary<IPEndPoint, PendingConnection> pendingConnections;
     private readonly HashSet<IPAddress> whiteList;
@@ -146,7 +146,7 @@ namespace MiniUDP
     {
       this.time = new NetTime();
       this.dataBuffer = new byte[NetConfig.DATA_BUFFER_SIZE];
-      this.packetPool = new UtilPool<NetPacket>();
+      this.packetPool = new NetPool<NetPacket>();
       this.peers = new Dictionary<IPEndPoint, NetPeer>();
       this.pendingConnections = new Dictionary<IPEndPoint, PendingConnection>();
       this.whiteList = new HashSet<IPAddress>();
@@ -185,9 +185,9 @@ namespace MiniUDP
       catch (SocketException exception)
       {
         if (exception.ErrorCode == 10048)
-          UtilDebug.LogError("Port " + port + " unavailable!");
+          NetDebug.LogError("Port " + port + " unavailable!");
         else
-          UtilDebug.LogError(exception.Message);
+          NetDebug.LogError(exception.Message);
         return;
       }
     }
@@ -201,7 +201,7 @@ namespace MiniUDP
       IPEndPoint endPoint = NetSocket.StringToEndPoint(address);
       if (this.peers.ContainsKey(endPoint) == false)
         this.pendingConnections.Add(
-          endPoint, 
+          endPoint,
           new PendingConnection(this.time, endPoint));
     }
 
@@ -233,7 +233,7 @@ namespace MiniUDP
           if (this.peers.TryGetValue(source, out sourcePeer))
             sourcePeer.AddReceived(packet);
           else
-            UtilDebug.LogWarning("Message from unrecognized peer: " + source);
+            NetDebug.LogWarning("Message from unrecognized peer: " + source);
         }
       }
     }
@@ -276,7 +276,7 @@ namespace MiniUDP
         {
           NetPacket packet = peer.Outgoing.Dequeue();
           this.TrySend(packet, peer.EndPoint);
-          UtilPool.Free(packet);
+          NetPool.Free(packet);
         }
 
         if (peer.Status == NetPeerStatus.Closed)
@@ -326,9 +326,9 @@ namespace MiniUDP
       {
         if (pending.TimeToRetry())
         {
-          NetPacket packet = this.AllocatePacket(NetPacketType.Connect);
+          NetPacket packet = this.AllocatePacket(NetPacketType.ConnectRequest);
           this.TrySend(packet, pending.EndPoint);
-          UtilPool.Free(packet);
+          NetPool.Free(packet);
           pending.LogAttempt();
         }
         else if (pending.HasExpired())
@@ -355,11 +355,11 @@ namespace MiniUDP
     {
       switch (packet.PacketType)
       {
-        case NetPacketType.Connect:
+        case NetPacketType.ConnectRequest:
           this.HandleConnection(source, true);
           return false;
 
-        case NetPacketType.Connected:
+        case NetPacketType.ConnectAccept:
           this.HandleConnection(source, false);
           return false;
 
@@ -367,11 +367,11 @@ namespace MiniUDP
           this.HandleDisconnection(source);
           return false;
 
-        case NetPacketType.Message:
+        case NetPacketType.Payload:
           return true;
 
         default:
-          UtilDebug.LogWarning("Invalid packet type for server");
+          NetDebug.LogWarning("Invalid packet type for server");
           return false;
       }
     }
@@ -386,7 +386,7 @@ namespace MiniUDP
         NetPeer peer = this.RegisterPeer(source);
 
         if (sendResponse)
-          peer.AddOutgoing(this.AllocatePacket(NetPacketType.Connected));
+          peer.AddOutgoing(this.AllocatePacket(NetPacketType.ConnectAccept));
 
         if (this.pendingConnections.ContainsKey(source))
           this.pendingConnections.Remove(source);
@@ -408,7 +408,7 @@ namespace MiniUDP
       }
       else
       {
-        UtilDebug.LogWarning("Disconnection from unknown source");
+        NetDebug.LogWarning("Disconnection from unknown source");
       }
     }
 
@@ -425,7 +425,7 @@ namespace MiniUDP
       if (this.whiteList.Contains(source.Address))
         return true;
 
-      UtilDebug.LogWarning("Unrecognized connection: " + source.Address);
+      NetDebug.LogWarning("Unrecognized connection: " + source.Address);
       return false;
     }
 
@@ -543,7 +543,7 @@ namespace MiniUDP
       }
       catch
       {
-        UtilDebug.LogWarning(
+        NetDebug.LogWarning(
           "Failed to set control code for ignoring ICMP port unreachable.");
       }
     }
