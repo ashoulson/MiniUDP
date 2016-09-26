@@ -36,12 +36,13 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Data\INetSendable.cs" />
     <Compile Include="Data\NetNotification.cs" />
-    <Compile Include="Data\NetPacketFactory.cs" />
     <Compile Include="Data\NetPayloadPacket.cs" />
     <Compile Include="Data\NetProtocolPacket.cs" />
     <Compile Include="Data\NetSessionPacket.cs" />
-    <Compile Include="IO\NetByteBuffer.cs" />
+    <Compile Include="Data\IO\NetByteBuffer.cs" />
+    <Compile Include="NetUtil.cs" />
     <Compile Include="NetConfig.cs" />
     <Compile Include="NetConnection.cs" />
     <Compile Include="NetDebug.cs" />
@@ -53,8 +54,7 @@
     <Compile Include="NetSession.cs" />
     <Compile Include="NetTraffic.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="NetTime.cs" />
-    <Compile Include="Test.cs" />
+    <Compile Include="Threading\NetRingBuffer.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -20,40 +20,8 @@
 
 namespace MiniUDP
 {
-  internal class NetPayloadPacket : INetPoolable<NetPayloadPacket>
+  internal interface INetSendable
   {
-    void INetPoolable<NetPayloadPacket>.Reset() { this.Reset(); }
-
-    // Packet Type                           1 Byte
-    internal byte sequenceId;             // 1 Byte
-    internal const int PAYLOAD_HEADER_SIZE = 2; // Total Bytes
-
-    internal readonly NetByteBuffer userData;
-
-    public NetPayloadPacket()
-    {
-      this.userData = new NetByteBuffer(NetConfig.MAX_PAYLOAD_DATA_SIZE);
-      this.Reset();
-    }
-
-    private void Reset()
-    {
-      this.sequenceId = 0;
-      this.userData.Reset();
-    }
-
-    public void Write(NetByteBuffer destBuffer)
-    {
-      destBuffer.Write((byte)NetPacketType.Payload);
-      destBuffer.Write(this.sequenceId);
-      destBuffer.Append(this.userData);
-    }
-
-    internal void Read(NetByteBuffer sourceBuffer)
-    {
-      sourceBuffer.ReadByte(); // Skip packet type
-      this.sequenceId = sourceBuffer.ReadByte();
-      sourceBuffer.ExtractRemaining(this.userData);
-    }
+    void Write(NetByteBuffer destBuffer);
   }
 }

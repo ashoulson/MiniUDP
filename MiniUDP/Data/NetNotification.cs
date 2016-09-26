@@ -24,14 +24,15 @@ namespace MiniUDP
   {
     void INetPoolable<NetNotification>.Reset() { this.Reset(); }
 
-    internal byte sequenceId;                  // 1 Byte
+    internal ushort sequence;                  // 2 Byte
     internal ushort byteSize                   /* 2 Bytes */ { get { return (ushort)this.userData.Length; } }
-    internal const int NOTIFICATION_HEADER_SIZE = 3; // Total Bytes
+    internal const int NOTIFICATION_HEADER_SIZE = 4; // Total Bytes
 
     internal readonly NetByteBuffer userData;
 
     // For sending only, not synchronized
     internal NetPeer Target { get; set; }
+    internal int TotalSize { get { return this.byteSize + NetNotification.NOTIFICATION_HEADER_SIZE; } }
 
     public NetNotification()
     {
@@ -41,20 +42,20 @@ namespace MiniUDP
 
     private void Reset()
     {
-      this.sequenceId = 0;
+      this.sequence = 0;
       this.userData.Reset();
     }
 
     internal void Write(NetByteBuffer destBuffer)
     {
-      destBuffer.Write(this.sequenceId);
+      destBuffer.Write(this.sequence);
       destBuffer.Write(this.byteSize);
       destBuffer.Append(this.userData);
     }
 
     internal void Read(NetByteBuffer sourceBuffer)
     {
-      this.sequenceId = sourceBuffer.ReadByte();
+      this.sequence = sourceBuffer.ReadUShort();
       ushort byteSize = sourceBuffer.ReadUShort();
       sourceBuffer.Extract(this.userData, byteSize);
     }

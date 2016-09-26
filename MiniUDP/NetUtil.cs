@@ -18,28 +18,26 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
-using System;
-
 namespace MiniUDP
 {
-  internal class NetPacketFactory
+  internal static class NetUtil
   {
-    public NetPool<NetNotification> NotificationPool { get { return this.notificationPool; } }
-    public NetPool<NetSessionPacket> SessionPool { get { return this.sessionPool; } }
-    public NetPool<NetPayloadPacket> PayloadPool { get { return this.payloadPool; } }
-    public NetPool<NetProtocolPacket> ProtocolPool { get { return this.protocolPool; } }
-
-    private readonly NetPool<NetNotification> notificationPool;
-    private readonly NetPool<NetSessionPacket> sessionPool;
-    private readonly NetPool<NetPayloadPacket> payloadPool;
-    private readonly NetPool<NetProtocolPacket> protocolPool;
-
-    internal NetPacketFactory()
+    /// <summary>
+    /// Compares two bytes with wrap-around arithmetic
+    /// </summary>
+    internal static int ByteSeqDiff(byte a, byte b)
     {
-      this.notificationPool = new NetPool<NetNotification>();
-      this.sessionPool = new NetPool<NetSessionPacket>();
-      this.payloadPool = new NetPool<NetPayloadPacket>();
-      this.protocolPool = new NetPool<NetProtocolPacket>();
+      // Assumes a sequence is 8 bits
+      return (int)((a << 24) - (b << 24)) >> 24;
+    }
+
+    /// <summary>
+    /// Compares two ushorts with wrap-around arithmetic
+    /// </summary>
+    internal static int UShortSeqDiff(ushort a, ushort b)
+    {
+        // Assumes a stamp is 16 bits
+        return (int)((a << 16) - (b << 16)) >> 16;
     }
   }
 }

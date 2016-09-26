@@ -1,5 +1,4 @@
-﻿using System;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using MiniUDP;
 
@@ -37,19 +36,19 @@ namespace Tests
       return buffer;
     }
 
-    private static void EvaluateBuffer(NetByteBuffer buffer)
+    public static void EvaluateBuffer(NetByteBuffer buffer)
     {
-      Assert.AreEqual(buffer.ReadBool(), TestByteBuffer.a);
-      Assert.AreEqual(buffer.ReadByte(), TestByteBuffer.b);
-      Assert.AreEqual(buffer.ReadShort(), TestByteBuffer.c);
-      Assert.AreEqual(buffer.ReadUShort(), TestByteBuffer.d);
-      Assert.AreEqual(buffer.ReadString(), TestByteBuffer.shortString);
-      Assert.AreEqual(buffer.ReadString(), "");
-      Assert.AreEqual(buffer.ReadInt(), TestByteBuffer.e);
-      Assert.AreEqual(buffer.ReadUInt(), TestByteBuffer.f);
-      Assert.AreEqual(buffer.ReadLong(), TestByteBuffer.g);
-      Assert.AreEqual(buffer.ReadULong(), TestByteBuffer.h);
-      Assert.AreEqual(buffer.Remaining, 0);
+      Assert.AreEqual(TestByteBuffer.a, buffer.ReadBool());
+      Assert.AreEqual(TestByteBuffer.b, buffer.ReadByte());
+      Assert.AreEqual(TestByteBuffer.c, buffer.ReadShort());
+      Assert.AreEqual(TestByteBuffer.d, buffer.ReadUShort());
+      Assert.AreEqual(TestByteBuffer.shortString, buffer.ReadString());
+      Assert.AreEqual("", buffer.ReadString());
+      Assert.AreEqual(TestByteBuffer.e, buffer.ReadInt());
+      Assert.AreEqual(TestByteBuffer.f, buffer.ReadUInt());
+      Assert.AreEqual(TestByteBuffer.g, buffer.ReadLong());
+      Assert.AreEqual(TestByteBuffer.h, buffer.ReadULong());
+      Assert.AreEqual(0, buffer.Remaining, 0);
     }
 
     [TestMethod]

@@ -20,10 +20,8 @@
 
 namespace MiniUDP
 {
-  internal class NetProtocolPacket : INetPoolable<NetProtocolPacket>
+  internal class NetProtocolPacket : INetSendable
   {
-    void INetPoolable<NetProtocolPacket>.Reset() { this.Reset(); }
-
     // Packet Type                            1 Byte
     internal NetProtocolType protocolType; // 1 Byte
     internal const int PROTOCOL_HEADER_SIZE = 2; // Total Bytes
@@ -42,7 +40,7 @@ namespace MiniUDP
       this.reason.Reset();
     }
 
-    internal void Write(NetByteBuffer destBuffer)
+    public void Write(NetByteBuffer destBuffer)
     {
       destBuffer.Write((byte)NetPacketType.Protocol);
       destBuffer.Write((byte)this.protocolType);
