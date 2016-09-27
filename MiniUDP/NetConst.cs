@@ -20,7 +20,55 @@
 
 namespace MiniUDP
 {
-  public class NetConfig
+  internal enum NetPacketType : byte
+  {
+    INVALID = 0,
+
+    Protocol, // Protocol-level packet (connect, disconnect, etc.)
+    Session,  // Session packet containing notifications and ping headers
+    Payload,  // Raw data payload
+  }
+
+  internal enum NetProtocolType : byte
+  {
+    INVALID = 0,
+
+    ConnectRequest,
+    ConnectAccept,
+
+    ConnectReject_BadID,  // This has a very, very low chance of happening
+    ConnectReject_Full,   // Server is full
+    ConnectReject_Closed, // We're not accepting connections at all
+    ConnectReject_Custom, // Another reason, contained in the data
+
+    Disconnect,
+  }
+
+  internal enum NetEventType : byte
+  {
+    INVALID = 0,
+
+    StartConnect, // Main Thread -> Background Thread
+
+    PeerConnecting,
+    PeerTimedOut,
+    PeerDisconnected,
+    PeerSocketError,
+
+    Connected,
+    Rejected,
+    Notification,
+    Payload,
+  }
+
+  internal enum NetPeerStatus
+  {
+    Pending,
+    Connected,
+    Closed,
+  }
+
+  public class NetConst
   {
     #region Socket Config
     internal const int SOCKET_BUFFER_SIZE = 2048;
@@ -32,38 +80,21 @@ namespace MiniUDP
     public const int MAX_PAYLOAD_DATA_SIZE = MAX_PACKET_SIZE - NetPayloadPacket.PAYLOAD_HEADER_SIZE;
     public const int MAX_PROTOCOL_DATA_SIZE = MAX_PACKET_SIZE - NetProtocolPacket.PROTOCOL_HEADER_SIZE;
     public const int MAX_SESSION_DATA_SIZE = MAX_PACKET_SIZE - NetSessionPacket.SESSION_HEADER_SIZE;
-    public const int MAX_NOTIFICATION_DATA_SIZE = MAX_SESSION_DATA_SIZE - NetNotification.NOTIFICATION_HEADER_SIZE;
+    public const int MAX_NOTIFICATION_DATA_SIZE = MAX_SESSION_DATA_SIZE - NetEvent.EVENT_HEADER_SIZE;
+    #endregion
+
+    #region Timing
+    public const long CONNECTION_TIME_OUT = 15000;         // How long to wait before disconnecting a quiet peer
+    public const long CONNECTION_ATTEMPT_TIME_OUT = 10000; // How long to try to connect for
+    public const int TICK_RATE = 200;                      // How often we do tick for sending session packets
+    public const int LONG_TICK_RATE = 600;                 // After this many ms, the next tick is a long tick
+    public const int THREAD_SLEEP_TIME = 1;                // Thread sleep time during update
     #endregion
 
     #region Counts
     public const int MAX_PENDING_NOTIFICATIONS = 100;
+    public const int MAX_PACKET_READS = 50;
     #endregion
-
-    /// <summary>
-    /// Maximum packets we will read during a poll.
-    /// </summary>
-    public const int MAX_PACKET_READS = 500;
-
-    /// <summary>
-    /// Maximum packets we will read from a given peer.
-    /// </summary>
-    public const int MAX_PACKETS_PER_PEER = 20;
-
-    /// <summary>
-    /// Rate at which to resend a "Connecting" message when attempting to
-    /// establish a connection with a peer.
-    /// </summary>
-    public const double CONNECTION_RETRY_RATE = 0.5;
-
-    /// <summary>
-    /// Timeout delay (in ms) for connections with peers.
-    /// </summary>
-    public const long CONNECTION_TIME_OUT = 15000;
-
-    /// <summary>
-    /// Timeout delay (in ms) attempting to establish a connection with a peer.
-    /// </summary>
-    public const long CONNECTION_ATTEMPT_TIME_OUT = 10000;
 
     /// <summary>
     /// The delay (in ms) before we consider a connection to be spiking after

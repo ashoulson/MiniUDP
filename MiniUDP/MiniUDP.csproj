@@ -37,24 +37,22 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Data\INetSendable.cs" />
-    <Compile Include="Data\NetNotification.cs" />
+    <Compile Include="Data\NetEvent.cs" />
     <Compile Include="Data\NetPayloadPacket.cs" />
     <Compile Include="Data\NetProtocolPacket.cs" />
     <Compile Include="Data\NetSessionPacket.cs" />
-    <Compile Include="Data\IO\NetByteBuffer.cs" />
+    <Compile Include="Data\NetByteBuffer.cs" />
     <Compile Include="NetUtil.cs" />
-    <Compile Include="NetConfig.cs" />
+    <Compile Include="NetConst.cs" />
     <Compile Include="NetConnection.cs" />
     <Compile Include="NetDebug.cs" />
-    <Compile Include="NetPeer.cs" />
-    <Compile Include="NetPacket.cs" />
+    <Compile Include="Threaded\NetPeer.cs" />
     <Compile Include="NetPool.cs" />
     <Compile Include="NetSocket.cs" />
-    <Compile Include="NetSocketIO.cs" />
-    <Compile Include="NetSession.cs" />
+    <Compile Include="Threaded\NetIOThread.cs" />
     <Compile Include="NetTraffic.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Threading\NetRingBuffer.cs" />
+    <Compile Include="Threaded\NetPipeline.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

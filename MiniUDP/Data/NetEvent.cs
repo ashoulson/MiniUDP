@@ -20,30 +20,61 @@
 
 namespace MiniUDP
 {
-  internal class NetNotification : INetPoolable<NetNotification>
+  public interface INetMessageOut
   {
-    void INetPoolable<NetNotification>.Reset() { this.Reset(); }
+    INetByteWriter Data { get; }
+  }
 
-    internal ushort sequence;                  // 2 Byte
-    internal ushort byteSize                   /* 2 Bytes */ { get { return (ushort)this.userData.Length; } }
-    internal const int NOTIFICATION_HEADER_SIZE = 4; // Total Bytes
+  public interface INetMessageIn
+  {
+    INetByteReader Data { get; }
+  }
+
+  /// <summary>
+  /// A poor abused multipurpose class. Events sent over the network are 
+  /// referred to as "notifications" but still use this event data structure
+  /// for simplicity's and efficiency's sakes as they're very similar.
+  /// </summary>
+  internal class NetEvent 
+    : INetPoolable<NetEvent>
+    , INetMessageOut
+    , INetMessageIn
+  {
+    void INetPoolable<NetEvent>.Reset() { this.Reset(); }
+    INetByteWriter INetMessageOut.Data { get { return this.userData; } }
+    INetByteReader INetMessageIn.Data { get { return this.userData; } }
+
+    internal ushort sequence;           // 2 Byte
+    internal ushort byteSize            /* 2 Bytes */ { get { return (ushort)this.userData.Length; } }
+    internal const int EVENT_HEADER_SIZE = 4; // Total Bytes
 
     internal readonly NetByteBuffer userData;
 
-    // For sending only, not synchronized
+    // Additional data for passing events around internally, not synchronized
+    internal NetEventType EventType { get; set; }
     internal NetPeer Target { get; set; }
-    internal int TotalSize { get { return this.byteSize + NetNotification.NOTIFICATION_HEADER_SIZE; } }
+    internal int AdditionalData { get; set; } // Socket error code, etc.
 
-    public NetNotification()
+    public NetEvent()
     {
-      this.userData = new NetByteBuffer(NetConfig.MAX_NOTIFICATION_DATA_SIZE);
+      this.userData = new NetByteBuffer(NetConst.MAX_NOTIFICATION_DATA_SIZE);
       this.Reset();
     }
 
     private void Reset()
     {
       this.sequence = 0;
+
       this.userData.Reset();
+
+      this.EventType = NetEventType.INVALID;
+      this.Target = null;
+      this.AdditionalData = 0;
+    }
+
+    internal int ComputeTotalSize()
+    {
+      return this.byteSize + NetEvent.EVENT_HEADER_SIZE;
     }
 
     internal void Write(NetByteBuffer destBuffer)

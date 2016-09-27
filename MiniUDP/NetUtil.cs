@@ -18,6 +18,9 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
+using System;
+using System.Security.Cryptography;
+
 namespace MiniUDP
 {
   internal static class NetUtil
@@ -38,6 +41,17 @@ namespace MiniUDP
     {
         // Assumes a stamp is 16 bits
         return (int)((a << 16) - (b << 16)) >> 16;
+    }
+
+    /// <summary>
+    /// Creates a 32-bit cryptographically random unique ID
+    /// </summary>
+    /// <returns></returns>
+    internal static uint CreateUniqueID()
+    {
+      byte[] bytes = new byte[4];
+      RandomNumberGenerator.Create().GetBytes(bytes);
+      return BitConverter.ToUInt32(bytes, 0);
     }
   }
 }

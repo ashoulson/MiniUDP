@@ -24,56 +24,56 @@ using System.Net;
 
 namespace MiniUDP
 {
-  internal enum NetPeerStatus
-  {
-    Pending,
-    Connected,
-    Closed,
-  }
-
   public class NetPeer
   {
+    #region Main Thread
+    // This region should only be accessed by the MAIN thread
+
     public object UserData { get; set; }
-    public bool IsConnected
-    {
-      get { return this.status == NetPeerStatus.Connected; }
-    }
+    public bool IsConnected { get { return this.status == NetPeerStatus.Connected; } }
+    public IPEndPoint EndPoint { get { return this.endPoint; } }
 
-    internal int NotificationCount { get { return this.outgoing.Count; } }
-    internal IPEndPoint EndPoint { get { return this.endPoint; } }
-
-    private readonly IPEndPoint endPoint;
     private byte payloadSequence;
+    #endregion
+
+    #region Background Thread
+    // This region should only be accessed by the BACKGROUND thread
+
+    internal IEnumerable<NetEvent> OutgoingNotifications { get { return this.outgoing; } }
+    internal NetPeerStatus Status { get { return this.status; } }
+    internal bool HasNotifications { get { return (this.outgoing.Count > 0); } }
+
+    private readonly Queue<NetEvent> outgoing;
+    private IPEndPoint endPoint;
+    private NetPeerStatus status;
+    private ushort notificationSequence;
+    private long creationTick;
+    private long expireTick;
 
     internal NetPeer(IPEndPoint endPoint, long creationTick)
     {
-      this.endPoint = endPoint;
+      // Probably no need to pool this class since users may want to hold on
+      // to them after closing and they aren't created all that often anyway
+
       this.payloadSequence = 0;
 
-      // Background thread data
-      this.outgoing = new Queue<NetNotification>();
+      this.outgoing = new Queue<NetEvent>();
+      this.endPoint = endPoint;
       this.status = NetPeerStatus.Pending;
       this.notificationSequence = 0;
-
       this.creationTick = creationTick;
-      this.expireTime = creationTick + NetConfig.CONNECTION_TIME_OUT;
+      this.expireTick = creationTick + NetConst.CONNECTION_TIME_OUT;
     }
-
-    #region Background Thread
-    internal readonly Queue<NetNotification> outgoing;
-    private NetPeerStatus status;
-    private ushort notificationSequence;
-
-    internal long creationTick;
-    internal long expireTime;
 
     /// <summary>
     /// Called on the background session thread.
     /// </summary>
-    internal void QueueNotification(NetNotification data)
+    internal void QueueNotification(NetEvent data)
     {
+      // TODO: Sequence number
+
       int notificationCount = this.outgoing.Count;
-      if (notificationCount >= NetConfig.MAX_PENDING_NOTIFICATIONS)
+      if (notificationCount >= NetConst.MAX_PENDING_NOTIFICATIONS)
       {
         NetDebug.LogError("Notification queue full, ignoring latest");
         return;
@@ -88,15 +88,25 @@ namespace MiniUDP
     /// </summary>
     internal void CleanNotifications(
       ushort notificationAck,
-      Action<NetNotification> deallocate)
+      Action<NetEvent> deallocate)
     {
       while (this.outgoing.Count > 0)
       {
-        NetNotification front = this.outgoing.Peek();
+        NetEvent front = this.outgoing.Peek();
         if (NetUtil.UShortSeqDiff(notificationAck, front.sequence) < 0)
           break;
         deallocate.Invoke(this.outgoing.Dequeue());
       }
+    }
+
+    /// <summary>
+    /// Logs the payload's sequence ID to record payload packet loss.
+    /// Note that the sequence ID is too low-resolution to use for actually
+    /// sequencing the payloads in any way, we just use it for statistics.
+    /// </summary>
+    internal void LogPayloadSequence(byte sequenceId)
+    {
+      // TODO: Record sequence for PL% calculation
     }
     #endregion
   }

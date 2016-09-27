@@ -20,40 +20,45 @@
 
 namespace MiniUDP
 {
-  internal class NetPayloadPacket : INetPoolable<NetPayloadPacket>
+  /// <summary>
+  /// A reusable class for reading/writing payload packet data.
+  /// </summary>
+  internal class NetPayloadPacket : INetSendable
   {
-    void INetPoolable<NetPayloadPacket>.Reset() { this.Reset(); }
-
     // Packet Type                           1 Byte
+    internal uint uniqueId;               // 4 Bytes
     internal byte sequenceId;             // 1 Byte
-    internal const int PAYLOAD_HEADER_SIZE = 2; // Total Bytes
+    internal const int PAYLOAD_HEADER_SIZE = 6; // Total Bytes
 
-    internal readonly NetByteBuffer userData;
+    internal readonly NetByteBuffer payload;
 
     public NetPayloadPacket()
     {
-      this.userData = new NetByteBuffer(NetConfig.MAX_PAYLOAD_DATA_SIZE);
+      this.payload = new NetByteBuffer(NetConst.MAX_PAYLOAD_DATA_SIZE);
       this.Reset();
     }
 
-    private void Reset()
+    internal void Reset()
     {
+      this.uniqueId = 0;
       this.sequenceId = 0;
-      this.userData.Reset();
+      this.payload.Reset();
     }
 
     public void Write(NetByteBuffer destBuffer)
     {
       destBuffer.Write((byte)NetPacketType.Payload);
+      destBuffer.Write(this.uniqueId);
       destBuffer.Write(this.sequenceId);
-      destBuffer.Append(this.userData);
+      destBuffer.Append(this.payload);
     }
 
     internal void Read(NetByteBuffer sourceBuffer)
     {
       sourceBuffer.ReadByte(); // Skip packet type
+      this.uniqueId = sourceBuffer.ReadUInt();
       this.sequenceId = sourceBuffer.ReadByte();
-      sourceBuffer.ExtractRemaining(this.userData);
+      sourceBuffer.ExtractRemaining(this.payload);
     }
   }
 }

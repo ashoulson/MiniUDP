@@ -44,17 +44,16 @@ namespace Tests
     [TestMethod]
     public void TestSessionPacket()
     {
-      NetPool<NetSessionPacket> sessionPool = new NetPool<NetSessionPacket>();
-      NetPool<NetNotification> notificationPool = new NetPool<NetNotification>();
+      NetPool<NetEvent> notificationPool = new NetPool<NetEvent>();
 
-      NetSessionPacket packet = sessionPool.Allocate();
+      NetSessionPacket packet = new NetSessionPacket();
       TestPackets.PopulateSessionPacketHeader(packet);
 
       // Fill the session with notifications
       int numAdded = 0;
       while (true)
       {
-        NetNotification notification = notificationPool.Allocate();
+        NetEvent notification = notificationPool.Allocate();
         notification.sequence = (byte)numAdded;
         notification.userData.Append(TestByteBuffer.FillBuffer());
 
@@ -66,16 +65,16 @@ namespace Tests
       // Make sure we filled the right number
       int notificationSize =
         TestByteBuffer.FillBuffer().Length
-        + NetNotification.NOTIFICATION_HEADER_SIZE;
-      int expectedFill = NetConfig.MAX_SESSION_DATA_SIZE / notificationSize;
+        + NetEvent.EVENT_HEADER_SIZE;
+      int expectedFill = NetConst.MAX_SESSION_DATA_SIZE / notificationSize;
       Assert.AreEqual(expectedFill, packet.notifications.Count);
 
-      NetByteBuffer writeBuffer = new NetByteBuffer(NetConfig.MAX_PACKET_SIZE);
+      NetByteBuffer writeBuffer = new NetByteBuffer(NetConst.MAX_PACKET_SIZE);
       packet.Write(writeBuffer);
 
-      foreach (NetNotification notification in packet.notifications)
+      foreach (NetEvent notification in packet.notifications)
         notificationPool.Deallocate(notification);
-      sessionPool.Deallocate(packet);
+      packet.Reset();
 
       // Make sure deallocation worked
       CheckResetSessionPacket(packet);
@@ -83,18 +82,17 @@ namespace Tests
       byte[] rawData = new byte[10000];
       int bytes = writeBuffer.Store(rawData);
 
-      NetByteBuffer readBuffer = new NetByteBuffer(NetConfig.MAX_PACKET_SIZE);
+      NetByteBuffer readBuffer = new NetByteBuffer(NetConst.MAX_PACKET_SIZE);
       readBuffer.Load(rawData, bytes);
 
-      NetSessionPacket newPacket = sessionPool.Allocate();
-      newPacket.Read(readBuffer, () => notificationPool.Allocate());
+      packet.Read(readBuffer, () => notificationPool.Allocate());
 
       // Check header data
-      CheckSessionPacketHeader(newPacket);
+      CheckSessionPacketHeader(packet);
 
       // Check the received notifications
       int sequence = 0;
-      foreach (NetNotification notification in newPacket.notifications)
+      foreach (NetEvent notification in packet.notifications)
       {
         Assert.AreEqual(notification.sequence, sequence);
         TestByteBuffer.EvaluateBuffer(notification.userData);
