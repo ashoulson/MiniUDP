@@ -23,45 +23,34 @@ using System.Collections.Generic;
 
 namespace MiniUDP
 {
+  /// <summary>
+  /// A reusable class for reading/writing session packet data.
+  /// </summary>
   internal class NetSessionPacket : INetSendable
   {
     // Packet Type                           1 Byte
+    internal uint uniqueId;               // 4 Bytes
     internal byte remoteLoss;             // 1 Byte
     internal byte notifyAck;              // 1 Byte
     internal byte pingSequence;           // 1 Byte
     internal byte pongSequence;           // 1 Byte
     internal ushort pongProcessTime;      // 2 Bytes
-    internal const int SESSION_HEADER_SIZE = 7; // Total Bytes
+    internal const int SESSION_HEADER_SIZE = 11; // Total Bytes
 
-    internal readonly Queue<NetNotification> notifications;
+    internal readonly Queue<NetEvent> notifications;
 
     // Total byte size, for notification capacity
     private int size;
 
     public NetSessionPacket()
     {
-      this.notifications = new Queue<NetNotification>();
+      this.notifications = new Queue<NetEvent>();
       this.Reset();
-    }
-
-    private void Initialize(
-      byte remoteLoss,
-      byte notifyAck,
-      byte pingSequence,
-      byte pongSequence,
-      ushort pongProcessTime)
-    {
-      this.remoteLoss = remoteLoss;
-      this.notifyAck = notifyAck;
-      this.pingSequence = pingSequence;
-      this.pongSequence = pongSequence;
-      this.pongProcessTime = pongProcessTime;
-      this.notifications.Clear();
-      this.size = 0;
     }
 
     internal void Reset()
     {
+      this.uniqueId = 0;
       this.remoteLoss = 0;
       this.notifyAck = 0;
       this.pingSequence = 0;
@@ -71,10 +60,10 @@ namespace MiniUDP
       this.size = 0;
     }
 
-    internal bool TryAdd(NetNotification notification)
+    internal bool TryAdd(NetEvent notification)
     {
-      int notificationSize = notification.TotalSize;
-      if ((this.size + notificationSize) > NetConfig.MAX_SESSION_DATA_SIZE)
+      int notificationSize = notification.ComputeTotalSize();
+      if ((this.size + notificationSize) > NetConst.MAX_SESSION_DATA_SIZE)
         return false;
 
       this.notifications.Enqueue(notification);
@@ -85,21 +74,23 @@ namespace MiniUDP
     public void Write(NetByteBuffer destBuffer)
     {
       destBuffer.Write((byte)NetPacketType.Session);
+      destBuffer.Write(this.uniqueId);
       destBuffer.Write(this.remoteLoss);
       destBuffer.Write(this.notifyAck);
       destBuffer.Write(this.pingSequence);
       destBuffer.Write(this.pongSequence);
       destBuffer.Write(this.pongProcessTime);
 
-      foreach (NetNotification notification in this.notifications)
+      foreach (NetEvent notification in this.notifications)
         notification.Write(destBuffer);
     }
 
     internal void Read(
       NetByteBuffer sourceBuffer, 
-      Func<NetNotification> createNotification)
+      Func<NetEvent> createNotification)
     {
       sourceBuffer.ReadByte(); // Skip packet type
+      this.uniqueId = sourceBuffer.ReadUInt();
       this.remoteLoss = sourceBuffer.ReadByte();
       this.notifyAck = sourceBuffer.ReadByte();
       this.pingSequence = sourceBuffer.ReadByte();
@@ -109,7 +100,7 @@ namespace MiniUDP
       this.notifications.Clear();
       while (sourceBuffer.Remaining > 0)
       {
-        NetNotification notification = createNotification.Invoke();
+        NetEvent notification = createNotification.Invoke();
         notification.Read(sourceBuffer);
         this.notifications.Enqueue(notification);
       }

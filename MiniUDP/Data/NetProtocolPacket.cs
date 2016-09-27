@@ -20,38 +20,45 @@
 
 namespace MiniUDP
 {
+  /// <summary>
+  /// A reusable class for reading/writing protocol packet data.
+  /// </summary>
   internal class NetProtocolPacket : INetSendable
   {
     // Packet Type                            1 Byte
+    internal uint uniqueId;                // 4 Bytes
     internal NetProtocolType protocolType; // 1 Byte
-    internal const int PROTOCOL_HEADER_SIZE = 2; // Total Bytes
+    internal const int PROTOCOL_HEADER_SIZE = 6; // Total Bytes
 
-    internal readonly NetByteBuffer reason;
+    internal readonly NetByteBuffer data;
 
     public NetProtocolPacket()
     {
-      this.reason = new NetByteBuffer(NetConfig.MAX_PROTOCOL_DATA_SIZE);
+      this.data = new NetByteBuffer(NetConst.MAX_PROTOCOL_DATA_SIZE);
       this.Reset();
     }
 
-    private void Reset()
+    internal void Reset()
     {
+      this.uniqueId = 0;
       this.protocolType = NetProtocolType.INVALID;
-      this.reason.Reset();
+      this.data.Reset();
     }
 
     public void Write(NetByteBuffer destBuffer)
     {
       destBuffer.Write((byte)NetPacketType.Protocol);
+      destBuffer.Write(this.uniqueId);
       destBuffer.Write((byte)this.protocolType);
-      destBuffer.Append(this.reason);
+      destBuffer.Append(this.data);
     }
 
     internal void Read(NetByteBuffer sourceBuffer)
     {
       sourceBuffer.ReadByte(); // Skip packet type
+      this.uniqueId = sourceBuffer.ReadUInt();
       this.protocolType = (NetProtocolType)sourceBuffer.ReadByte();
-      sourceBuffer.ExtractRemaining(this.reason);
+      sourceBuffer.ExtractRemaining(this.data);
     }
   }
 }

@@ -1,5 +1,7 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using System.Linq;
+
 using MiniUDP;
 
 namespace Tests
@@ -8,14 +10,14 @@ namespace Tests
   public class TestNetPeer
   {
     [TestMethod]
-    public void TestNotifications()
+    public void TestReliableCleanup()
     {
-      NetPeer netPeer = new NetPeer(null);
+      NetPeer netPeer = new NetPeer(null, 0);
       for (int i = 0; i < 20; i++)
-        netPeer.QueueNotification(new NetNotification());
+        netPeer.QueueNotification(new NetEvent());
 
       netPeer.CleanNotifications(10, (x) => x = null);
-      Assert.AreEqual(netPeer.NotificationCount, 9);
+      Assert.AreEqual(netPeer.OutgoingNotifications.Count(), 9);
     }
   }
 }
