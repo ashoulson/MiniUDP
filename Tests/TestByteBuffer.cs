@@ -18,7 +18,7 @@ namespace Tests
     private static long g = -47238930234;
     private static ulong h = 47238972387409970;
 
-    public static NetByteBuffer FillBuffer()
+    internal static NetByteBuffer FillBuffer()
     {
       NetByteBuffer buffer = new NetByteBuffer(3000);
 
@@ -36,7 +36,7 @@ namespace Tests
       return buffer;
     }
 
-    public static void EvaluateBuffer(NetByteBuffer buffer)
+    internal static void EvaluateBuffer(NetByteBuffer buffer)
     {
       Assert.AreEqual(TestByteBuffer.a, buffer.ReadBool());
       Assert.AreEqual(TestByteBuffer.b, buffer.ReadByte());
@@ -48,7 +48,7 @@ namespace Tests
       Assert.AreEqual(TestByteBuffer.f, buffer.ReadUInt());
       Assert.AreEqual(TestByteBuffer.g, buffer.ReadLong());
       Assert.AreEqual(TestByteBuffer.h, buffer.ReadULong());
-      Assert.AreEqual(0, buffer.Remaining, 0);
+      Assert.AreEqual(0, buffer.ReadRemaining, 0);
     }
 
     [TestMethod]
@@ -76,7 +76,7 @@ namespace Tests
 
       EvaluateBuffer(outBuffer1);
       EvaluateBuffer(outBuffer2);
-      Assert.AreEqual(combined.Remaining, 0);
+      Assert.AreEqual(combined.ReadRemaining, 0);
     }
   }
 }

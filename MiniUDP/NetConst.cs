@@ -36,10 +36,10 @@ namespace MiniUDP
     ConnectRequest,
     ConnectAccept,
 
-    ConnectReject_BadID,  // This has a very, very low chance of happening
-    ConnectReject_Full,   // Server is full
-    ConnectReject_Closed, // We're not accepting connections at all
-    ConnectReject_Custom, // Another reason, contained in the data
+    Reject_BadID,   // This has a very, very low chance of happening
+    Reject_BadData, // Approval rejected connection challenge, details in data
+    Reject_Full,    // Server is full
+    Reject_Closed,  // We're not accepting connections at all
 
     Disconnect,
   }
@@ -48,9 +48,7 @@ namespace MiniUDP
   {
     INVALID = 0,
 
-    StartConnect, // Main Thread -> Background Thread
-
-    PeerConnecting,
+    PeerConnected,
     PeerTimedOut,
     PeerDisconnected,
     PeerSocketError,
@@ -59,13 +57,6 @@ namespace MiniUDP
     Rejected,
     Notification,
     Payload,
-  }
-
-  internal enum NetPeerStatus
-  {
-    Pending,
-    Connected,
-    Closed,
   }
 
   public class NetConst

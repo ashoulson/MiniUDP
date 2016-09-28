@@ -15,29 +15,29 @@ namespace Tests
 
     internal static void PopulateSessionPacketHeader(NetSessionPacket packet)
     {
-      packet.remoteLoss = TestPackets.remoteLoss;
-      packet.notifyAck = TestPackets.notifyAck;
-      packet.pingSequence = TestPackets.pingSequence;
-      packet.pongSequence = TestPackets.pongSequence;
-      packet.pongProcessTime = TestPackets.pongProcessTime;
+      packet.RemoteLoss = TestPackets.remoteLoss;
+      packet.NotifyAck = TestPackets.notifyAck;
+      packet.PingSequence = TestPackets.pingSequence;
+      packet.PongSequence = TestPackets.pongSequence;
+      packet.PongProcessTime = TestPackets.pongProcessTime;
     }
 
     internal static void CheckSessionPacketHeader(NetSessionPacket packet)
     {
-      Assert.AreEqual(TestPackets.remoteLoss, packet.remoteLoss);
-      Assert.AreEqual(TestPackets.notifyAck, packet.notifyAck);
-      Assert.AreEqual(TestPackets.pingSequence, packet.pingSequence);
-      Assert.AreEqual(TestPackets.pongSequence, packet.pongSequence);
-      Assert.AreEqual(TestPackets.pongProcessTime, packet.pongProcessTime);
+      Assert.AreEqual(TestPackets.remoteLoss, packet.RemoteLoss);
+      Assert.AreEqual(TestPackets.notifyAck, packet.NotifyAck);
+      Assert.AreEqual(TestPackets.pingSequence, packet.PingSequence);
+      Assert.AreEqual(TestPackets.pongSequence, packet.PongSequence);
+      Assert.AreEqual(TestPackets.pongProcessTime, packet.PongProcessTime);
     }
 
     internal static void CheckResetSessionPacket(NetSessionPacket packet)
     {
-      Assert.AreEqual(0, packet.remoteLoss);
-      Assert.AreEqual(0, packet.notifyAck);
-      Assert.AreEqual(0, packet.pingSequence);
-      Assert.AreEqual(0, packet.pongSequence);
-      Assert.AreEqual(0, packet.pongProcessTime);
+      Assert.AreEqual(0, packet.RemoteLoss);
+      Assert.AreEqual(0, packet.NotifyAck);
+      Assert.AreEqual(0, packet.PingSequence);
+      Assert.AreEqual(0, packet.PongSequence);
+      Assert.AreEqual(0, packet.PongProcessTime);
       Assert.AreEqual(0, packet.notifications.Count);
     }
 
@@ -54,8 +54,12 @@ namespace Tests
       while (true)
       {
         NetEvent notification = notificationPool.Allocate();
-        notification.sequence = (byte)numAdded;
-        notification.userData.Append(TestByteBuffer.FillBuffer());
+        notification.Initialize(
+          NetEventType.Notification, 
+          null, 
+          (ushort)numAdded, 
+          -1, 
+          TestByteBuffer.FillBuffer());
 
         if (packet.TryAdd(notification) == false)
           break;
@@ -72,8 +76,10 @@ namespace Tests
       NetByteBuffer writeBuffer = new NetByteBuffer(NetConst.MAX_PACKET_SIZE);
       packet.Write(writeBuffer);
 
+      int alternator = 0;
       foreach (NetEvent notification in packet.notifications)
-        notificationPool.Deallocate(notification);
+        if ((alternator++ % 2) == 1) // Free every other notification
+          notificationPool.Deallocate(notification);
       packet.Reset();
 
       // Make sure deallocation worked
@@ -94,7 +100,7 @@ namespace Tests
       int sequence = 0;
       foreach (NetEvent notification in packet.notifications)
       {
-        Assert.AreEqual(notification.sequence, sequence);
+        Assert.AreEqual(notification.Sequence, sequence);
         TestByteBuffer.EvaluateBuffer(notification.userData);
         sequence++;
       }

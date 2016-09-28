@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Diagnostics;
+using System;
 
 namespace MiniUDP
 {
@@ -20,7 +21,7 @@ namespace MiniUDP
       this.eventPool.Deallocate(evnt);
     }
 
-    internal uint UniqueId { get { return this.uniqueId; } }
+    internal uint UniqueId { get { return this.uid; } }
 
     #region Main Thread
     // This region should only be accessed by the MAIN thread
@@ -31,11 +32,13 @@ namespace MiniUDP
     /// </summary>
     internal void SendNotification(NetPeer target, NetByteBuffer userData)
     {
-      NetEvent notification = this.CreateEmpty(NetEventType.Notification);
-      notification.Target = target;
-   // notification.sequence = **SET BY PEER**
-      notification.userData.Append(userData);
-
+      NetEvent notification =
+        this.CreateEvent(
+          NetEventType.Notification,
+          target,
+          0, // Set by peer
+          0,
+          userData);
       this.notifyIn.Enqueue(notification);
     }
 
@@ -44,28 +47,33 @@ namespace MiniUDP
       return this.eventOut.TryDequeue(out received);
     }
 
-    internal void BeginConnect(IPEndPoint endpoint, NetByteBuffer userData)
-    {
-      NetDebug.Assert(this.isStarted == false);
+    //internal void BeginConnect(
+    //  IPEndPoint hostEndPoint, 
+    //  NetByteBuffer userData)
+    //{
+    //  if (this.isStarted)
+    //    throw new ApplicationException("Session thread already running");
 
-      this.isClient = true;
-      this.connectTarget = endpoint;
-      this.connectionHail.Append(userData);
+    //  NetDebug.Assert(this.isStarted == false);
+    //  NetDebug.Assert(this.isClient);
 
-      // TODO: Start/Run
-    }
+    //  this.connectTarget = hostEndPoint;
+    //  this.connectionData.Append(userData);
 
-    internal void BeginListen()
-    {
-      NetDebug.Assert(this.isStarted == false);
+    //  // TODO: Start/Run
+    //}
 
-      this.isClient = false;
-      this.connectTarget = null;
-      this.connectionHail = null; // Trash it, we don't need it
+    //internal void BeginListen()
+    //{
+    //  NetDebug.Assert(this.isStarted == false);
+    //  NetDebug.Assert(this.isClient == false);
 
-      // TODO: Bind the socket? Or should it already be done first?
-      // TODO: Start/Run
-    }
+    //  this.connectTarget = null;
+    //  this.connectionData = null; // Trash it, we don't need it
+
+    //  // TODO: Bind the socket? Or should it already be done first?
+    //  // TODO: Start/Run
+    //}
     #endregion
 
     #region Background Thread
@@ -75,51 +83,58 @@ namespace MiniUDP
     private readonly NetPipeline<NetEvent> eventOut;
 
     private readonly NetPool<NetEvent> eventPool;
-    // TODO: Use a unique ID instead of an IPEndPoint
-    // https://github.com/lidgren/lidgren-network-gen3/search?utf8=%E2%9C%93&q=m_uniqueIdentifier
-    private readonly Dictionary<IPEndPoint, NetPeer> peers;
+    private readonly HashSet<IPEndPoint> pendingConnections;
+    private readonly Dictionary<uint, NetPeer> peers;
     private readonly NetSocket socket;
+    private readonly uint uid;
     private readonly Stopwatch timer;
-    private readonly uint uniqueId;
+    private readonly NetApprover approver;
 
-    private readonly NetPayloadPacket payloadReusable;
-    private readonly NetProtocolPacket protocolReusable;
-    private readonly NetSessionPacket sessionReusable;
+    private readonly NetPayloadPacket payloadIn;
+    private readonly NetProtocolPacket protocolIn;
+    private readonly NetSessionPacket sessionIn;
+    private readonly NetProtocolPacket protocolOut;
+    private readonly NetSessionPacket sessionOut;
 
-    // TODO: How do we handle connecting vs not connecting?
-    private bool isClient;
-    private IPEndPoint connectTarget;
-    private NetByteBuffer connectionHail;
+    private bool IsFull { get { return false; } }
+    private NetByteBuffer connectionData;
 
     private long nextTick;
     private long nextLongTick;
     private bool isStarted;
     private bool isRunning;
+    private bool acceptConnections;
 
-    public NetIOThread(Socket socket)
+    public NetIOThread(
+      Socket socket, 
+      NetApprover approver, 
+      bool acceptConnections)
     {
       this.notifyIn = new NetPipeline<NetEvent>();
       this.eventOut = new NetPipeline<NetEvent>();
 
       this.eventPool = new NetPool<NetEvent>();
-      this.peers = new Dictionary<IPEndPoint, NetPeer>();
+      this.pendingConnections = new HashSet<IPEndPoint>();
+      this.peers = new Dictionary<uint, NetPeer>();
       this.socket = new NetSocket(socket);
+      this.uid = NetUtil.CreateUniqueID();
       this.timer = new Stopwatch();
-      this.uniqueId = NetUtil.CreateUniqueID();
+      this.approver = approver;
 
-      this.payloadReusable = new NetPayloadPacket();
-      this.protocolReusable = new NetProtocolPacket();
-      this.sessionReusable = new NetSessionPacket();
+      this.payloadIn = new NetPayloadPacket();
+      this.protocolIn = new NetProtocolPacket();
+      this.sessionIn = new NetSessionPacket();
+      this.protocolOut = new NetProtocolPacket();
+      this.sessionOut = new NetSessionPacket();
 
-      this.isClient = false;
-      this.connectTarget = null;
-      this.connectionHail = 
+      this.connectionData = 
         new NetByteBuffer(NetConst.MAX_PROTOCOL_DATA_SIZE);
 
       this.nextTick = 0;
       this.nextLongTick = 0;
       this.isStarted = false;
       this.isRunning = false;
+      this.acceptConnections = acceptConnections;
     }
 
     private void Run()
@@ -137,11 +152,13 @@ namespace MiniUDP
       // TODO: Close all remaining peers?
     }
 
+    #region Update Loop
     private void Update()
     {
       bool longTick;
       if (this.TickAvailable(out longTick))
       {
+        // Time to do a tick
         this.ReadPackets();
         this.ReadNotifications();
         foreach (NetPeer peer in this.peers.Values)
@@ -149,6 +166,9 @@ namespace MiniUDP
       }
     }
 
+    /// <summary>
+    /// Returns true iff it's time for a tick, or a long tick.
+    /// </summary>
     private bool TickAvailable(out bool longTick)
     {
       longTick = false;
@@ -174,8 +194,8 @@ namespace MiniUDP
     {
       NetEvent notification = null;
       while (this.notifyIn.TryDequeue(out notification))
-        if ((notification.Target != null) && notification.Target.IsConnected)
-          notification.Target.QueueNotification(notification);
+        if (this.CanSendToPeer(notification.Peer))
+          notification.Peer.QueueNotification(notification);
     }
 
     /// <summary>
@@ -188,23 +208,28 @@ namespace MiniUDP
 
     private void UpdatePeer(NetPeer peer, bool longTick)
     {
-      switch (peer.Status)
-      {
-        case NetPeerStatus.Pending:
-          // TODO: Send Connection request
-          break;
-
-        case NetPeerStatus.Connected:
-          this.SendSessionPacket(peer, longTick);
-          break;
-
-        case NetPeerStatus.Closed:
-          // TODO: Main thread closed peer?
-          break;
-      }
+      if (peer.IsConnected)
+        this.UpdateConnected(peer, longTick);
+      else
+        ; // TODO: Main thread closed peer, do cleanup
     }
 
+    private void UpdateConnecting(NetPeer peer, bool longTick)
+    {
+      this.SendConnectPacket(peer.EndPoint);
+    }
+
+    private void UpdateConnected(NetPeer peer, bool longTick)
+    {
+      if (longTick || peer.HasNotifications)
+        this.SendSessionPacket(peer);
+    }
+    #endregion
+
     #region Packet Read
+    /// <summary>
+    /// Polls the socket and receives all pending packet data.
+    /// </summary>
     private void ReadPackets()
     {
       for (int i = 0; i < NetConst.MAX_PACKET_READS; i++)
@@ -217,24 +242,24 @@ namespace MiniUDP
       }
     }
 
+    /// <summary>
+    /// Reads a fresh packet and dispatches it based on type.
+    /// </summary>
     private void ReadPacket(IPEndPoint source, NetByteBuffer buffer)
     {
       NetPacketType type = (NetPacketType)buffer.PeekByte();
       switch (type)
       {
         case NetPacketType.Payload:
-          this.payloadReusable.Read(buffer);
-          this.ReadPayload(source, this.payloadReusable);
+          this.ReadPayload(source, buffer);
           break;
 
         case NetPacketType.Protocol:
-          this.protocolReusable.Read(buffer);
-          this.ReadProtocol(source, this.protocolReusable);
+          this.ReadProtocol(source, buffer);
           break;
 
         case NetPacketType.Session:
-          this.sessionReusable.Read(buffer, this.CreateEmptyNotification);
-          this.ReadSession(source, this.sessionReusable);
+          this.ReadSession(source, buffer);
           break;
 
         default:
@@ -243,36 +268,149 @@ namespace MiniUDP
       }
     }
 
+    /// <summary>
+    /// Reads in a payload packet.
+    /// </summary>
     private void ReadPayload(
       IPEndPoint source, 
-      NetPayloadPacket payloadPacket)
+      NetByteBuffer buffer)
     {
+      this.payloadIn.Read(buffer);
+
       NetPeer peer = null;
-      if (this.peers.TryGetValue(source, out peer) && peer.IsConnected)
+      if (this.TryGetPeer(this.payloadIn.uid, true, out peer))
       {
-        peer.LogPayloadSequence(payloadPacket.sequenceId);
-        this.ReportEvent(this.PayloadEvent(peer, payloadPacket.payload));
+        // Notify the peer that it got a payload (must happen first!)
+        peer.PayloadReceived(
+          this.timer.ElapsedMilliseconds,
+          this.payloadIn);
+
+        // Send the payload out to the main thread (must happen second!)
+        this.ReportEvent(
+          this.CreatePayloadEvent(
+            peer, 
+            this.payloadIn.payload));
       }
 
-      payloadPacket.Reset();
+      this.payloadIn.Reset();
     }
 
+    /// <summary>
+    /// Reads in a protocol packet.
+    /// </summary>
     private void ReadProtocol(
       IPEndPoint source,
-      NetProtocolPacket protocolPacket)
+      NetByteBuffer buffer)
     {
-      // TODO: Respond to protocol logic
-      protocolPacket.Reset();
+      this.protocolIn.Read(buffer);
+
+      switch (this.protocolIn.ProtocolType)
+      {
+        case NetProtocolType.ConnectRequest:
+          this.HandleConnectRequest(source, this.protocolIn);
+          break;
+
+        // TODO: Other protocol types
+      }
+
+      this.protocolIn.Reset();
     }
 
     private void ReadSession(
       IPEndPoint source,
-      NetSessionPacket sessionPacket)
+      NetByteBuffer buffer)
     {
+      this.sessionIn.Read(buffer, this.CreateNotification);
+
       // TODO: Reliability stuff
       // TODO: Session header data stuff
       // TODO: Make sure each notification has its Target set to the peer
-      sessionPacket.Reset();
+
+      this.sessionIn.Reset();
+    }
+    #endregion
+
+    #region Protocol Handling
+    private void HandleConnectRequest(
+      IPEndPoint source, 
+      NetProtocolPacket packet)
+    {
+      if (this.ShouldAccept(source, packet) == false)
+        return;
+
+      // Create and add the new peer
+      NetPeer newPeer =
+        new NetPeer(
+          source,
+          this.timer.ElapsedMilliseconds,
+          packet.UID);
+      this.peers.Add(packet.UID, newPeer);
+
+      // Queue the event out to the main thread to receive the connection
+      NetEvent connectedEvent = 
+        this.CreateEvent(
+          NetEventType.PeerConnected,
+          newPeer,
+          0,
+          0,
+          packet.data);
+      this.eventOut.Enqueue(connectedEvent);
+    }
+
+    /// <summary>
+    /// Whether or not we should accept a connection before consulting
+    /// the application for the final verification step.
+    /// </summary>
+    private bool ShouldAccept(
+      IPEndPoint source,
+      NetProtocolPacket packet)
+    {
+      NetPeer peer = null;
+      if (this.TryGetPeer(packet.UID, false, out peer))
+      {
+        // ID matches but endpoint doesn't
+        if (peer.EndPoint.Equals(source) == false)
+          this.RejectConnection(source, NetProtocolType.Reject_BadID, null);
+
+        // Peer is already established, resend the accept if they're open
+        if (peer.IsConnected)
+          this.AcceptConnection(peer);
+        return false;
+      }
+
+      if (this.acceptConnections == false)
+      {
+        this.RejectConnection(source, NetProtocolType.Reject_Closed, null);
+        return false;
+      }
+
+      if (this.IsFull)
+      {
+        this.RejectConnection(source, NetProtocolType.Reject_Full, null);
+        return false;
+      }
+
+      NetByteBuffer reason = null;
+      if (this.Approve(source, packet, out reason) == false)
+      {
+        this.RejectConnection(source, NetProtocolType.Reject_BadData, reason);
+        return false;
+      }
+
+      return true;
+    }
+
+    private void AcceptConnection(NetPeer peer)
+    {
+      // TODO: Send out the accept packet
+    }
+
+    private void RejectConnection(
+      IPEndPoint source, 
+      NetProtocolType connectReject,
+      NetByteBuffer rejectReason)
+    {
+      // TODO: Send out the rejection packet
     }
     #endregion
 
@@ -280,53 +418,108 @@ namespace MiniUDP
     /// <summary>
     /// Sends a session packet to the given peer.
     /// </summary>
-    private SendResult SendSessionPacket(NetPeer peer, bool force)
+    private bool SendConnectPacket(IPEndPoint endPoint)
     {
-      if (force || peer.HasNotifications)
-      {
-        this.sessionReusable.uniqueId = this.uniqueId;
-        this.sessionReusable.remoteLoss = 0; // TODO
-        this.sessionReusable.notifyAck = 0; // TODO
-        this.sessionReusable.pingSequence = 0; // TODO
-        this.sessionReusable.pongSequence = 0; // TODO
-        this.sessionReusable.pongProcessTime = 0; // TODO
+      this.protocolOut.Initialize(
+        this.uid,
+        NetProtocolType.ConnectRequest,
+        this.connectionData);
 
-        foreach (NetEvent notification in peer.OutgoingNotifications)
-          if (this.sessionReusable.TryAdd(notification) == false)
-            break;
+      bool result = this.socket.TrySend(endPoint, this.protocolOut);
+      this.protocolOut.Reset();
+      return false;
+    }
 
-        bool result = 
-          this.socket.TrySend(peer.EndPoint, this.sessionReusable);
-        this.sessionReusable.Reset();
-        return result ? SendResult.Succeeded : SendResult.Failed;
-      }
+    /// <summary>
+    /// Sends a session packet to the given peer.
+    /// </summary>
+    private bool SendSessionPacket(NetPeer peer)
+    {
+      this.sessionOut.Initialize(
+        this.uid,
+        0,  // TODO
+        0,  // TODO
+        0,  // TODO
+        0,  // TODO
+        0); // TODO
 
-      return SendResult.Skipped;
+      foreach (NetEvent notification in peer.OutgoingNotifications)
+        if (this.sessionOut.TryAdd(notification) == false)
+          break;
+
+      bool result = this.socket.TrySend(peer.EndPoint, this.sessionOut);
+      this.sessionOut.Reset();
+      return result;
     }
     #endregion
 
     #region Event Allocation
-    private NetEvent CreateEmpty(NetEventType type)
+    private NetEvent CreateEvent(
+      NetEventType type,
+      NetPeer target,
+      ushort sequence,
+      int additionalData,
+      NetByteBuffer toAppend)
     {
       NetEvent evnt = this.eventPool.Allocate();
-      evnt.EventType = type;
+      evnt.Initialize(
+        type,
+        target,
+        sequence,
+        additionalData,
+        toAppend);
       return evnt;
     }
 
-    private NetEvent CreateEmptyNotification()
+    private NetEvent CreateNotification()
     {
-      return this.CreateEmpty(NetEventType.Notification);
+      NetEvent evnt = this.eventPool.Allocate();
+      evnt.Initialize(NetEventType.Notification);
+      return evnt;
     }
 
-    private NetEvent PayloadEvent(
+    private NetEvent CreatePayloadEvent(
       NetPeer target,
       NetByteBuffer userData)
     {
       NetEvent evnt = this.eventPool.Allocate();
-      evnt.EventType = NetEventType.Payload;
-      evnt.Target = target;
-      evnt.userData.Append(userData);
+      evnt.Initialize(
+        NetEventType.Payload,
+        target,
+        0,
+        0,
+        userData);
       return evnt;
+    }
+    #endregion
+
+    #region Misc. Helpers
+    private bool CanSendToPeer(NetPeer peer)
+    {
+      return peer.IsConnected;
+    }
+
+    private bool TryGetPeer(
+      uint uid, 
+      bool requireConnected, 
+      out NetPeer peer)
+    {
+      peer = null;
+      if (this.peers.TryGetValue(uid, out peer))
+        if (peer.IsConnected || (requireConnected == false))
+          return true;
+      return false;
+    }
+
+    private bool Approve(
+      IPEndPoint source, 
+      NetProtocolPacket packet, 
+      out NetByteBuffer rejectReason)
+    {
+      rejectReason = null;
+      if (this.approver == null)
+        return true;
+      return this.approver.CheckApproval(source, packet, out rejectReason);
     }
     #endregion
 

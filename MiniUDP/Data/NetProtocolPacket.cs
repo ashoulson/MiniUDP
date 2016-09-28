@@ -26,8 +26,8 @@ namespace MiniUDP
   internal class NetProtocolPacket : INetSendable
   {
     // Packet Type                            1 Byte
-    internal uint uniqueId;                // 4 Bytes
-    internal NetProtocolType protocolType; // 1 Byte
+    internal uint UID                      /* 4 Bytes */ { get; private set; }
+    internal NetProtocolType ProtocolType  /* 1 Byte  */ { get; private set; }
     internal const int PROTOCOL_HEADER_SIZE = 6; // Total Bytes
 
     internal readonly NetByteBuffer data;
@@ -40,24 +40,35 @@ namespace MiniUDP
 
     internal void Reset()
     {
-      this.uniqueId = 0;
-      this.protocolType = NetProtocolType.INVALID;
+      this.UID = 0;
+      this.ProtocolType = NetProtocolType.INVALID;
       this.data.Reset();
+    }
+
+    internal void Initialize(
+      uint uid,
+      NetProtocolType protocolType,
+      NetByteBuffer data)
+    {
+      this.UID = uid;
+      this.ProtocolType = protocolType;
+      if (data != null)
+        this.data.Overwrite(data);
     }
 
     public void Write(NetByteBuffer destBuffer)
     {
       destBuffer.Write((byte)NetPacketType.Protocol);
-      destBuffer.Write(this.uniqueId);
-      destBuffer.Write((byte)this.protocolType);
+      destBuffer.Write(this.UID);
+      destBuffer.Write((byte)this.ProtocolType);
       destBuffer.Append(this.data);
     }
 
     internal void Read(NetByteBuffer sourceBuffer)
     {
       sourceBuffer.ReadByte(); // Skip packet type
-      this.uniqueId = sourceBuffer.ReadUInt();
-      this.protocolType = (NetProtocolType)sourceBuffer.ReadByte();
+      this.UID = sourceBuffer.ReadUInt();
+      this.ProtocolType = (NetProtocolType)sourceBuffer.ReadByte();
       sourceBuffer.ExtractRemaining(this.data);
     }
   }
