@@ -26,10 +26,14 @@ using System.Threading;
 
 namespace MiniUDP
 {
-  public delegate void SocketError(Exception exception);
+  public delegate void SocketFailed(SocketException exception);
 
   public class NetSocket
   {
+    public event SocketFailed BindFailed;
+    public event SocketFailed ReceiveFailed;
+    public event SocketFailed SendFailed;
+
     public static NetSocket Create()
     {
       Socket socket = 
@@ -66,12 +70,14 @@ namespace MiniUDP
       }
     }
 
-    private readonly NetByteBuffer dataBuffer;
+    private readonly NetByteBuffer receiving;
+    private readonly NetByteBuffer sending;
     private readonly Socket socket;
 
     internal NetSocket(Socket socket)
     {
-      this.dataBuffer = new NetByteBuffer(NetConst.SOCKET_BUFFER_SIZE);
+      this.receiving = new NetByteBuffer(NetConst.SOCKET_BUFFER_SIZE);
+      this.sending = new NetByteBuffer(NetConst.SOCKET_BUFFER_SIZE);
       this.socket = socket;
     }
 
@@ -82,22 +88,22 @@ namespace MiniUDP
 
     /// <summary>
     /// Starts the socket using the supplied endpoint.
-    /// 
-    /// Should only be called on the main thread.
     /// </summary>
-    public void Bind(int port)
+    public bool Bind(int port)
     {
       try
       {
         this.socket.Bind(new IPEndPoint(IPAddress.Any, port));
+        return true;
       }
       catch (SocketException exception)
       {
-        if (exception.ErrorCode == 10048)
-          NetDebug.LogError("Port " + port + " unavailable!");
+        if (exception.ErrorCode == (int)SocketError.AddressAlreadyInUse)
+          NetDebug.LogError("Port " + port + " unavailable");
         else
           NetDebug.LogError(exception.Message);
-        return;
+        this.BindFailed?.Invoke(exception);
+        return false;
       }
     }
 
@@ -118,29 +124,30 @@ namespace MiniUDP
       try
       {
         EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
-        this.dataBuffer.Reset();
+        this.receiving.Reset();
 
         int receivedBytes =
           this.socket.ReceiveFrom(
-            this.dataBuffer.rawData,
-            this.dataBuffer.rawData.Length,
+            this.receiving.rawData,
+            this.receiving.rawData.Length,
             SocketFlags.None,
             ref endPoint);
-        this.dataBuffer.length = receivedBytes;
+        this.receiving.length = receivedBytes;
 
         if (receivedBytes > 0)
         {
           source = endPoint as IPEndPoint;
-          buffer = this.dataBuffer;
+          buffer = this.receiving;
           return true;
         }
 
         return false;
       }
-      catch (Exception exception)
+      catch (SocketException exception)
       {
         NetDebug.LogError("Receive failed: " + exception.Message);
         NetDebug.LogError(exception.StackTrace);
+        this.ReceiveFailed?.Invoke(exception);
         return false;
       }
     }
@@ -153,23 +160,24 @@ namespace MiniUDP
       IPEndPoint destination,
       INetSendable packet)
     {
-      this.dataBuffer.Reset();
-      packet.Write(this.dataBuffer);
+      this.sending.Reset();
+      packet.Write(this.sending);
 
       try
       {
         int bytesSent =
           this.socket.SendTo(
-            this.dataBuffer.rawData,
-            this.dataBuffer.length,
+            this.sending.rawData,
+            this.sending.length,
             SocketFlags.None,
             destination);
-        return (bytesSent == this.dataBuffer.length);
+        return (bytesSent == this.sending.length);
       }
-      catch (Exception exception)
+      catch (SocketException exception)
       {
         NetDebug.LogError("Send failed: " + exception.Message);
         NetDebug.LogError(exception.StackTrace);
+        this.SendFailed?.Invoke(exception);
         return false;
       }
     }

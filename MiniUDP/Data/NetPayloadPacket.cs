@@ -26,8 +26,8 @@ namespace MiniUDP
   internal class NetPayloadPacket : INetSendable
   {
     // Packet Type                           1 Byte
-    internal uint uniqueId;               // 4 Bytes
-    internal byte sequenceId;             // 1 Byte
+    internal uint uid;                    // 4 Bytes
+    internal byte payloadSequence;        // 1 Byte
     internal const int PAYLOAD_HEADER_SIZE = 6; // Total Bytes
 
     internal readonly NetByteBuffer payload;
@@ -40,24 +40,24 @@ namespace MiniUDP
 
     internal void Reset()
     {
-      this.uniqueId = 0;
-      this.sequenceId = 0;
+      this.uid = 0;
+      this.payloadSequence = 0;
       this.payload.Reset();
     }
 
     public void Write(NetByteBuffer destBuffer)
     {
       destBuffer.Write((byte)NetPacketType.Payload);
-      destBuffer.Write(this.uniqueId);
-      destBuffer.Write(this.sequenceId);
+      destBuffer.Write(this.uid);
+      destBuffer.Write(this.payloadSequence);
       destBuffer.Append(this.payload);
     }
 
     internal void Read(NetByteBuffer sourceBuffer)
     {
       sourceBuffer.ReadByte(); // Skip packet type
-      this.uniqueId = sourceBuffer.ReadUInt();
-      this.sequenceId = sourceBuffer.ReadByte();
+      this.uid = sourceBuffer.ReadUInt();
+      this.payloadSequence = sourceBuffer.ReadByte();
       sourceBuffer.ExtractRemaining(this.payload);
     }
   }

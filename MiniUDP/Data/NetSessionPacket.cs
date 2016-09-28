@@ -28,13 +28,13 @@ namespace MiniUDP
   /// </summary>
   internal class NetSessionPacket : INetSendable
   {
-    // Packet Type                           1 Byte
-    internal uint uniqueId;               // 4 Bytes
-    internal byte remoteLoss;             // 1 Byte
-    internal byte notifyAck;              // 1 Byte
-    internal byte pingSequence;           // 1 Byte
-    internal byte pongSequence;           // 1 Byte
-    internal ushort pongProcessTime;      // 2 Bytes
+    // Packet Type                           1 Byte  */
+    internal uint UID                     /* 4 Bytes */ { get; private set; }
+    internal byte RemoteLoss              /* 1 Byte  */ { get; private set; }
+    internal byte NotifyAck               /* 1 Byte  */ { get; private set; }
+    internal byte PingSequence            /* 1 Byte  */ { get; private set; }
+    internal byte PongSequence            /* 1 Byte  */ { get; private set; }
+    internal ushort PongProcessTime       /* 2 Bytes */ { get; private set; }
     internal const int SESSION_HEADER_SIZE = 11; // Total Bytes
 
     internal readonly Queue<NetEvent> notifications;
@@ -50,12 +50,30 @@ namespace MiniUDP
 
     internal void Reset()
     {
-      this.uniqueId = 0;
-      this.remoteLoss = 0;
-      this.notifyAck = 0;
-      this.pingSequence = 0;
-      this.pongSequence = 0;
-      this.pongProcessTime = 0;
+      this.UID = 0;
+      this.RemoteLoss = 0;
+      this.NotifyAck = 0;
+      this.PingSequence = 0;
+      this.PongSequence = 0;
+      this.PongProcessTime = 0;
+      this.notifications.Clear();
+      this.size = 0;
+    }
+
+    internal void Initialize(
+      uint uid,
+      byte remoteLoss,
+      byte notifyAck,
+      byte pingSequence,
+      byte pongSequence,
+      ushort pongProcessTime)
+    {
+      this.UID = uid;
+      this.RemoteLoss = remoteLoss;
+      this.NotifyAck = notifyAck;
+      this.PingSequence = pingSequence;
+      this.PongSequence = pongSequence;
+      this.PongProcessTime = pongProcessTime;
       this.notifications.Clear();
       this.size = 0;
     }
@@ -74,12 +92,12 @@ namespace MiniUDP
     public void Write(NetByteBuffer destBuffer)
     {
       destBuffer.Write((byte)NetPacketType.Session);
-      destBuffer.Write(this.uniqueId);
-      destBuffer.Write(this.remoteLoss);
-      destBuffer.Write(this.notifyAck);
-      destBuffer.Write(this.pingSequence);
-      destBuffer.Write(this.pongSequence);
-      destBuffer.Write(this.pongProcessTime);
+      destBuffer.Write(this.UID);
+      destBuffer.Write(this.RemoteLoss);
+      destBuffer.Write(this.NotifyAck);
+      destBuffer.Write(this.PingSequence);
+      destBuffer.Write(this.PongSequence);
+      destBuffer.Write(this.PongProcessTime);
 
       foreach (NetEvent notification in this.notifications)
         notification.Write(destBuffer);
@@ -90,15 +108,15 @@ namespace MiniUDP
       Func<NetEvent> createNotification)
     {
       sourceBuffer.ReadByte(); // Skip packet type
-      this.uniqueId = sourceBuffer.ReadUInt();
-      this.remoteLoss = sourceBuffer.ReadByte();
-      this.notifyAck = sourceBuffer.ReadByte();
-      this.pingSequence = sourceBuffer.ReadByte();
-      this.pongSequence = sourceBuffer.ReadByte();
-      this.pongProcessTime = sourceBuffer.ReadUShort();
+      this.UID = sourceBuffer.ReadUInt();
+      this.RemoteLoss = sourceBuffer.ReadByte();
+      this.NotifyAck = sourceBuffer.ReadByte();
+      this.PingSequence = sourceBuffer.ReadByte();
+      this.PongSequence = sourceBuffer.ReadByte();
+      this.PongProcessTime = sourceBuffer.ReadUShort();
 
       this.notifications.Clear();
-      while (sourceBuffer.Remaining > 0)
+      while (sourceBuffer.ReadRemaining > 0)
       {
         NetEvent notification = createNotification.Invoke();
         notification.Read(sourceBuffer);

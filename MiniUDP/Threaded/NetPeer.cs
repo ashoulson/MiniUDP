@@ -26,43 +26,47 @@ namespace MiniUDP
 {
   public class NetPeer
   {
+    public bool IsConnected { get; private set; }
+
     #region Main Thread
     // This region should only be accessed by the MAIN thread
 
     public object UserData { get; set; }
-    public bool IsConnected { get { return this.status == NetPeerStatus.Connected; } }
     public IPEndPoint EndPoint { get { return this.endPoint; } }
 
-    private byte payloadSequence;
+    private byte outgoingPayloadSequence;
     #endregion
 
     #region Background Thread
     // This region should only be accessed by the BACKGROUND thread
 
     internal IEnumerable<NetEvent> OutgoingNotifications { get { return this.outgoing; } }
-    internal NetPeerStatus Status { get { return this.status; } }
     internal bool HasNotifications { get { return (this.outgoing.Count > 0); } }
 
     private readonly Queue<NetEvent> outgoing;
-    private IPEndPoint endPoint;
-    private NetPeerStatus status;
+    private readonly uint uid;
+    private readonly IPEndPoint endPoint;
     private ushort notificationSequence;
     private long creationTick;
     private long expireTick;
 
-    internal NetPeer(IPEndPoint endPoint, long creationTick)
+    internal NetPeer(IPEndPoint endPoint, long creationTick, uint uid)
     {
       // Probably no need to pool this class since users may want to hold on
       // to them after closing and they aren't created all that often anyway
 
-      this.payloadSequence = 0;
+      this.outgoingPayloadSequence = 0;
 
       this.outgoing = new Queue<NetEvent>();
       this.endPoint = endPoint;
-      this.status = NetPeerStatus.Pending;
+      this.uid = uid;
+
       this.notificationSequence = 0;
       this.creationTick = creationTick;
       this.expireTick = creationTick + NetConst.CONNECTION_TIME_OUT;
+
+      // We only create a peer if it's a new connection, so this starts true
+      this.IsConnected = true;
     }
 
     /// <summary>
@@ -70,8 +74,6 @@ namespace MiniUDP
     /// </summary>
     internal void QueueNotification(NetEvent data)
     {
-      // TODO: Sequence number
-
       int notificationCount = this.outgoing.Count;
       if (notificationCount >= NetConst.MAX_PENDING_NOTIFICATIONS)
       {
@@ -79,8 +81,8 @@ namespace MiniUDP
         return;
       }
 
+      data.SetSequence(this.notificationSequence++);
       this.outgoing.Enqueue(data);
-      data.sequence = this.notificationSequence++;
     }
 
     /// <summary>
@@ -93,20 +95,59 @@ namespace MiniUDP
       while (this.outgoing.Count > 0)
       {
         NetEvent front = this.outgoing.Peek();
-        if (NetUtil.UShortSeqDiff(notificationAck, front.sequence) < 0)
+        if (NetUtil.UShortSeqDiff(notificationAck, front.Sequence) < 0)
           break;
         deallocate.Invoke(this.outgoing.Dequeue());
       }
     }
 
     /// <summary>
-    /// Logs the payload's sequence ID to record payload packet loss.
-    /// Note that the sequence ID is too low-resolution to use for actually
-    /// sequencing the payloads in any way, we just use it for statistics.
+    /// Updates the expire timer and logs the payload's sequence ID to record 
+    /// payload packet loss. Note that the sequence ID is too low-resolution 
+    /// to use for actually sequencing the payloads in any way, we just use
+    /// it for statistics.
     /// </summary>
-    internal void LogPayloadSequence(byte sequenceId)
+    internal void PayloadReceived(
+      long currentTick, 
+      NetPayloadPacket packet)
     {
+      this.expireTick = currentTick + NetConst.CONNECTION_TIME_OUT;
+
       // TODO: Record sequence for PL% calculation
+    }
+
+    /// <summary>
+    /// Logs the fact that we received a session packet. Parses through
+    /// all notifications and updates according to what's contained.
+    /// Returns all not-yet-processed notifications.
+    /// </summary>
+    internal IEnumerable<NetEvent> SessionReceived(
+      long currentTick,
+      NetSessionPacket packet)
+    {
+      this.expireTick = currentTick + NetConst.CONNECTION_TIME_OUT;
+
+      // TODO: Traffic/Ping statistics updates
+
+      foreach (NetEvent notification in packet.notifications)
+        if (this.ReceiveNotification(notification))
+          yield return notification;
+    }
+
+    /// <summary>
+    /// Receives a notification and updates its ack counter. 
+    /// Return true iff the notification is new.
+    /// </summary>
+    private bool ReceiveNotification(NetEvent notification)
+    {
+      notification.AssignPeer(this);
+
+      // TODO: Check for old notifications
+      // TODO: Clean old notifications
+      // TODO: Update Ack
+      // TODO: Return true/false if new/old
+
+      return true;
     }
     #endregion
   }

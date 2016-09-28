@@ -46,6 +46,7 @@
     <Compile Include="NetConst.cs" />
     <Compile Include="NetConnection.cs" />
     <Compile Include="NetDebug.cs" />
+    <Compile Include="Threaded\NetApprover.cs" />
     <Compile Include="Threaded\NetPeer.cs" />
     <Compile Include="NetPool.cs" />
     <Compile Include="NetSocket.cs" />

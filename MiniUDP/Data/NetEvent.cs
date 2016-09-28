@@ -35,7 +35,7 @@ namespace MiniUDP
   /// referred to as "notifications" but still use this event data structure
   /// for simplicity's and efficiency's sakes as they're very similar.
   /// </summary>
-  internal class NetEvent 
+  internal class NetEvent
     : INetPoolable<NetEvent>
     , INetMessageOut
     , INetMessageIn
@@ -44,16 +44,17 @@ namespace MiniUDP
     INetByteWriter INetMessageOut.Data { get { return this.userData; } }
     INetByteReader INetMessageIn.Data { get { return this.userData; } }
 
-    internal ushort sequence;           // 2 Byte
-    internal ushort byteSize            /* 2 Bytes */ { get { return (ushort)this.userData.Length; } }
+    // Network header data
+    internal ushort Sequence            /* 2 Byte  */ { get; private set; }
+    internal ushort ByteSize            /* 2 Bytes */ { get { return (ushort)this.userData.Length; } }
     internal const int EVENT_HEADER_SIZE = 4; // Total Bytes
 
     internal readonly NetByteBuffer userData;
 
     // Additional data for passing events around internally, not synchronized
-    internal NetEventType EventType { get; set; }
-    internal NetPeer Target { get; set; }
-    internal int AdditionalData { get; set; } // Socket error code, etc.
+    internal NetEventType EventType { get; private set; }
+    internal NetPeer Peer { get; private set; }
+    internal int AdditionalData { get; private set; } // Socket error code, etc.
 
     public NetEvent()
     {
@@ -61,34 +62,67 @@ namespace MiniUDP
       this.Reset();
     }
 
+    internal void Initialize(NetEventType type)
+    {
+      this.Initialize(type, null, 0, 0, null);
+    }
+
+    internal void Initialize(
+      NetEventType type, 
+      NetPeer peer, 
+      ushort sequence, 
+      int additionalData,
+      NetByteBuffer toAppend)
+    {
+      this.EventType = type;
+      this.Peer = peer;
+      this.Sequence = sequence;
+      this.AdditionalData = additionalData;
+      if (toAppend != null)
+        this.userData.Overwrite(toAppend);
+    }
+
     private void Reset()
     {
-      this.sequence = 0;
+      this.Sequence = 0;
 
       this.userData.Reset();
 
       this.EventType = NetEventType.INVALID;
-      this.Target = null;
+      this.Peer = null;
       this.AdditionalData = 0;
     }
 
     internal int ComputeTotalSize()
     {
-      return this.byteSize + NetEvent.EVENT_HEADER_SIZE;
+      return this.ByteSize + NetEvent.EVENT_HEADER_SIZE;
     }
 
     internal void Write(NetByteBuffer destBuffer)
     {
-      destBuffer.Write(this.sequence);
-      destBuffer.Write(this.byteSize);
+      destBuffer.Write(this.Sequence);
+      destBuffer.Write(this.ByteSize);
       destBuffer.Append(this.userData);
     }
 
     internal void Read(NetByteBuffer sourceBuffer)
     {
-      this.sequence = sourceBuffer.ReadUShort();
+      this.Sequence = sourceBuffer.ReadUShort();
       ushort byteSize = sourceBuffer.ReadUShort();
       sourceBuffer.Extract(this.userData, byteSize);
+
+      this.Peer = null; // Will be assigned via AssignPeer afterwards
+      this.AdditionalData = 0;
+    }
+
+    internal void SetSequence(ushort sequence)
+    {
+      this.Sequence = sequence;
+    }
+
+    internal void AssignPeer(NetPeer target)
+    {
+      this.Peer = target;
     }
   }
 }

@@ -26,9 +26,11 @@ namespace MiniUDP
 {
   public interface INetByteReader
   {
-    int Capacity { get; }
     int Length { get; }
-    int Remaining { get; }
+    int Position { get; }
+    int ReadRemaining { get; }
+
+    void Rewind();
 
     byte PeekByte();
 
@@ -48,6 +50,8 @@ namespace MiniUDP
   public interface INetByteWriter
   {
     int Capacity { get; }
+    int Length { get; }
+    int SpaceRemaining { get; }
 
     void Write(bool value);
     void Write(byte value);
@@ -62,7 +66,7 @@ namespace MiniUDP
     void Load(byte[] sourceBuffer, int sourceLength);
   }
 
-  public class NetByteBuffer : INetByteReader, INetByteWriter
+  internal class NetByteBuffer : INetByteReader, INetByteWriter
   {
     #region Encoding
     private static void Encode(byte[] buffer, int offset, byte value)
@@ -109,9 +113,11 @@ namespace MiniUDP
     }
     #endregion
 
+    public int Position { get { return this.position; } }
     public int Capacity { get { return this.rawData.Length; } }
     public int Length { get { return this.length; } }
-    public int Remaining { get { return this.length - this.position; } }
+    public int ReadRemaining { get { return this.length - this.position; } }
+    public int SpaceRemaining { get { return this.rawData.Length - this.length; } }
 
     internal readonly byte[] rawData;
     internal int length;
@@ -121,6 +127,11 @@ namespace MiniUDP
     {
       this.rawData = new byte[capacity];
       this.Reset();
+    }
+
+    public void Rewind()
+    {
+      this.position = 0;
     }
 
     internal void Reset()
@@ -161,6 +172,17 @@ namespace MiniUDP
       this.length += source.length;
     }
 
+    public void Overwrite(NetByteBuffer source)
+    {
+      Buffer.BlockCopy(
+        source.rawData,
+        0,
+        this.rawData,
+        0,
+        source.length);
+      this.length = source.length;
+    }
+
     public void Extract(NetByteBuffer destination, int count)
     {
       Buffer.BlockCopy(
@@ -175,7 +197,7 @@ namespace MiniUDP
 
     public void ExtractRemaining(NetByteBuffer destination)
     {
-      this.Extract(destination, this.Remaining);
+      this.Extract(destination, this.ReadRemaining);
     }
 
     /// <summary>

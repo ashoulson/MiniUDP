@@ -25,6 +25,8 @@ namespace MiniUDP
 {
   internal static class NetUtil
   {
+    private const int UID_GEN_RETRIES = 1000;
+
     /// <summary>
     /// Compares two bytes with wrap-around arithmetic
     /// </summary>
