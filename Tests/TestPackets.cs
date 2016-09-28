@@ -15,11 +15,13 @@ namespace Tests
 
     internal static void PopulateSessionPacketHeader(NetSessionPacket packet)
     {
-      packet.RemoteLoss = TestPackets.remoteLoss;
-      packet.NotifyAck = TestPackets.notifyAck;
-      packet.PingSequence = TestPackets.pingSequence;
-      packet.PongSequence = TestPackets.pongSequence;
-      packet.PongProcessTime = TestPackets.pongProcessTime;
+      packet.Initialize(
+        0,
+        TestPackets.remoteLoss,
+        TestPackets.notifyAck,
+        TestPackets.pingSequence,
+        TestPackets.pongSequence,
+        TestPackets.pongProcessTime);
     }
 
     internal static void CheckSessionPacketHeader(NetSessionPacket packet)
