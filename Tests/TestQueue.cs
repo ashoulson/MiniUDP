@@ -95,7 +95,7 @@ namespace Tests
   [TestClass]
   public class TestQueue
   {
-    private const int ITERATIONS = 250000000;
+    private const int ITERATIONS = 25000000;
 
     private interface TestQueueHolder<T>
     {

@@ -109,30 +109,30 @@ namespace MiniUDP
     /// </summary>
     internal void PayloadReceived(
       long currentTick, 
-      NetPayloadPacket packet)
+      byte sequence)
     {
       this.expireTick = currentTick + NetConst.CONNECTION_TIME_OUT;
 
       // TODO: Record sequence for PL% calculation
     }
 
-    /// <summary>
-    /// Logs the fact that we received a session packet. Parses through
-    /// all notifications and updates according to what's contained.
-    /// Returns all not-yet-processed notifications.
-    /// </summary>
-    internal IEnumerable<NetEvent> SessionReceived(
-      long currentTick,
-      NetSessionPacket packet)
-    {
-      this.expireTick = currentTick + NetConst.CONNECTION_TIME_OUT;
+    ///// <summary>
+    ///// Logs the fact that we received a session packet. Parses through
+    ///// all notifications and updates according to what's contained.
+    ///// Returns all not-yet-processed notifications.
+    ///// </summary>
+    //internal IEnumerable<NetEvent> SessionReceived(
+    //  long currentTick,
+    //  NetSessionPacket packet)
+    //{
+    //  this.expireTick = currentTick + NetConst.CONNECTION_TIME_OUT;
 
-      // TODO: Traffic/Ping statistics updates
+    //  // TODO: Traffic/Ping statistics updates
 
-      foreach (NetEvent notification in packet.notifications)
-        if (this.ReceiveNotification(notification))
-          yield return notification;
-    }
+    //  foreach (NetEvent notification in packet.notifications)
+    //    if (this.ReceiveNotification(notification))
+    //      yield return notification;
+    //}
 
     /// <summary>
     /// Receives a notification and updates its ack counter. 
@@ -140,7 +140,7 @@ namespace MiniUDP
     /// </summary>
     private bool ReceiveNotification(NetEvent notification)
     {
-      notification.AssignPeer(this);
+      // TODO: Initialize notification?
 
       // TODO: Check for old notifications
       // TODO: Clean old notifications

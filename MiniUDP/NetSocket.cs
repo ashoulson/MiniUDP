@@ -47,8 +47,6 @@ namespace MiniUDP
 
     /// <summary>
     /// Configures a socket for sending/receiving data.
-    /// 
-    /// Should only be called on the main thread.
     /// </summary>
     private static void ConfigureSocket(Socket socket)
     {
@@ -70,14 +68,12 @@ namespace MiniUDP
       }
     }
 
-    private readonly NetByteBuffer receiving;
-    private readonly NetByteBuffer sending;
+    private readonly NetByteBuffer receiveBuffer;
     private readonly Socket socket;
 
     internal NetSocket(Socket socket)
     {
-      this.receiving = new NetByteBuffer(NetConst.SOCKET_BUFFER_SIZE);
-      this.sending = new NetByteBuffer(NetConst.SOCKET_BUFFER_SIZE);
+      this.receiveBuffer = new NetByteBuffer(NetConst.SOCKET_BUFFER_SIZE);
       this.socket = socket;
     }
 
@@ -124,20 +120,20 @@ namespace MiniUDP
       try
       {
         EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
-        this.receiving.Reset();
+        this.receiveBuffer.Reset();
 
         int receivedBytes =
           this.socket.ReceiveFrom(
-            this.receiving.rawData,
-            this.receiving.rawData.Length,
+            this.receiveBuffer.rawData,
+            this.receiveBuffer.rawData.Length,
             SocketFlags.None,
             ref endPoint);
-        this.receiving.length = receivedBytes;
+        this.receiveBuffer.length = receivedBytes;
 
         if (receivedBytes > 0)
         {
           source = endPoint as IPEndPoint;
-          buffer = this.receiving;
+          buffer = this.receiveBuffer;
           return true;
         }
 
@@ -157,21 +153,18 @@ namespace MiniUDP
     /// Returns false if the send failed.
     /// </summary>
     internal bool TrySend(
-      IPEndPoint destination,
-      INetSendable packet)
+      NetByteBuffer sendBuffer,
+      IPEndPoint destination)
     {
-      this.sending.Reset();
-      packet.Write(this.sending);
-
       try
       {
         int bytesSent =
           this.socket.SendTo(
-            this.sending.rawData,
-            this.sending.length,
+            sendBuffer.rawData,
+            sendBuffer.length,
             SocketFlags.None,
             destination);
-        return (bytesSent == this.sending.length);
+        return (bytesSent == sendBuffer.length);
       }
       catch (SocketException exception)
       {

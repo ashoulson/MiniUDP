@@ -24,24 +24,27 @@ namespace MiniUDP
   {
     INVALID = 0,
 
-    Protocol, // Protocol-level packet (connect, disconnect, etc.)
-    Session,  // Session packet containing notifications and ping headers
-    Payload,  // Raw data payload
+    // Protocol-Level Messages
+    ConnectRequest,
+    ConnectAccept,
+    ConnectReject,
+    Disconnect,
+    Ping,
+    Pong,
+
+    // User Data Carriers
+    Payload,
+    Notification,
   }
 
-  internal enum NetProtocolType : byte
+  internal enum NetRejectReason : byte
   {
     INVALID = 0,
 
-    ConnectRequest,
-    ConnectAccept,
-
-    Reject_BadID,   // This has a very, very low chance of happening
-    Reject_BadData, // Approval rejected connection challenge, details in data
-    Reject_Full,    // Server is full
-    Reject_Closed,  // We're not accepting connections at all
-
-    Disconnect,
+    BadVersion,
+    BadUID,
+    Closed,
+    Full,
   }
 
   internal enum NetEventType : byte
@@ -67,11 +70,10 @@ namespace MiniUDP
     #endregion
 
     #region Packet Sizes
+    public const int MAX_VERSION_KEY_LENGTH = 30;
     public const int MAX_PACKET_SIZE = 1264;
-    public const int MAX_PAYLOAD_DATA_SIZE = MAX_PACKET_SIZE - NetPayloadPacket.PAYLOAD_HEADER_SIZE;
-    public const int MAX_PROTOCOL_DATA_SIZE = MAX_PACKET_SIZE - NetProtocolPacket.PROTOCOL_HEADER_SIZE;
-    public const int MAX_SESSION_DATA_SIZE = MAX_PACKET_SIZE - NetSessionPacket.SESSION_HEADER_SIZE;
-    public const int MAX_NOTIFICATION_DATA_SIZE = MAX_SESSION_DATA_SIZE - NetEvent.EVENT_HEADER_SIZE;
+    public const int MAX_PACKET_DATA_SIZE = MAX_PACKET_SIZE - NetIO.HEADER_SIZE;
+    public const int MAX_NOTIFICATION_DATA_SIZE = MAX_PACKET_DATA_SIZE - NetEvent.HEADER_SIZE;
     #endregion
 
     #region Timing
