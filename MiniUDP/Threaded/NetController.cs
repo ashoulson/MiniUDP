@@ -377,14 +377,16 @@ namespace MiniUDP
     }
 
     private bool TryGetPeer(
+      EndPoint source,
       uint uid, 
       bool requireConnected, 
       out NetPeer peer)
     {
       peer = null;
       if (this.peers.TryGetValue(uid, out peer))
-        if (peer.IsConnected || (requireConnected == false))
-          return true;
+        if (peer.EndPoint.Equals(source))
+          if (peer.IsConnected || (requireConnected == false))
+            return true;
       return false;
     }
     #endregion
