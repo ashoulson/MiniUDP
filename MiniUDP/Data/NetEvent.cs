@@ -31,98 +31,78 @@ namespace MiniUDP
   }
 
   /// <summary>
-  /// A poor abused multipurpose class. Events sent over the network are 
-  /// referred to as "notifications" but still use this event data structure
-  /// for simplicity's and efficiency's sakes as they're very similar.
+  /// A multipurpose class (ab)used in two ways. Used for passing messages
+  /// between threads internally (called "events" in this instance) on the 
+  /// pipeline queues. Also encoded/decoded over the network to pass reliable 
+  /// messages to connected peers (called "notifications" in this instance).
   /// </summary>
   internal class NetEvent
     : INetPoolable<NetEvent>
     , INetMessageOut
     , INetMessageIn
   {
+    public const int HEADER_SIZE = 
+      sizeof(ushort); // Byte count
+
     void INetPoolable<NetEvent>.Reset() { this.Reset(); }
-    INetByteWriter INetMessageOut.Data { get { return this.userData; } }
-    INetByteReader INetMessageIn.Data { get { return this.userData; } }
+    INetByteWriter INetMessageOut.Data { get { return this.eventData; } }
+    INetByteReader INetMessageIn.Data { get { return this.eventData; } }
 
-    // Network header data
-    internal ushort Sequence            /* 2 Byte  */ { get; private set; }
-    internal ushort ByteSize            /* 2 Bytes */ { get { return (ushort)this.userData.Length; } }
-    internal const int EVENT_HEADER_SIZE = 4; // Total Bytes
-
-    internal readonly NetByteBuffer userData;
+    // Net-encoded data
+    private ushort length { get { return (ushort)this.eventData.Length; } }
+    private readonly NetByteBuffer eventData;
 
     // Additional data for passing events around internally, not synchronized
     internal NetEventType EventType { get; private set; }
-    internal NetPeer Peer { get; private set; }
-    internal int AdditionalData { get; private set; } // Socket error code, etc.
+    internal NetPeer Peer { get; private set; } // Associated peer
+    internal int Value { get; private set; }    // Sequence#, Error code, etc.
+
+    // Helpers
+    internal int PackSize { get { return this.length + NetEvent.HEADER_SIZE; } }
+    internal ushort Sequence { get { return (ushort)this.Value; } }
 
     public NetEvent()
     {
-      this.userData = new NetByteBuffer(NetConst.MAX_NOTIFICATION_DATA_SIZE);
+      this.eventData = new NetByteBuffer(NetConst.MAX_NOTIFICATION_DATA_SIZE);
       this.Reset();
-    }
-
-    internal void Initialize(NetEventType type)
-    {
-      this.Initialize(type, null, 0, 0, null);
     }
 
     internal void Initialize(
       NetEventType type, 
       NetPeer peer, 
-      ushort sequence, 
-      int additionalData,
+      int value,
       NetByteBuffer toAppend)
     {
       this.EventType = type;
       this.Peer = peer;
-      this.Sequence = sequence;
-      this.AdditionalData = additionalData;
+      this.Value = value;
       if (toAppend != null)
-        this.userData.Overwrite(toAppend);
+        this.eventData.Overwrite(toAppend);
     }
 
     private void Reset()
     {
-      this.Sequence = 0;
-
-      this.userData.Reset();
-
+      this.eventData.Reset();
       this.EventType = NetEventType.INVALID;
       this.Peer = null;
-      this.AdditionalData = 0;
-    }
-
-    internal int ComputeTotalSize()
-    {
-      return this.ByteSize + NetEvent.EVENT_HEADER_SIZE;
+      this.Value = 0;
     }
 
     internal void Write(NetByteBuffer destBuffer)
     {
-      destBuffer.Write(this.Sequence);
-      destBuffer.Write(this.ByteSize);
-      destBuffer.Append(this.userData);
+      destBuffer.Write(this.length);
+      destBuffer.Append(this.eventData);
     }
 
     internal void Read(NetByteBuffer sourceBuffer)
     {
-      this.Sequence = sourceBuffer.ReadUShort();
       ushort byteSize = sourceBuffer.ReadUShort();
-      sourceBuffer.Extract(this.userData, byteSize);
-
-      this.Peer = null; // Will be assigned via AssignPeer afterwards
-      this.AdditionalData = 0;
+      sourceBuffer.Extract(this.eventData, byteSize);
     }
 
     internal void SetSequence(ushort sequence)
     {
-      this.Sequence = sequence;
-    }
-
-    internal void AssignPeer(NetPeer target)
-    {
-      this.Peer = target;
+      this.Value = sequence;
     }
   }
 }

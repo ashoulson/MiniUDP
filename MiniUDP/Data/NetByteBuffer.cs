@@ -185,12 +185,13 @@ namespace MiniUDP
 
     public void Extract(NetByteBuffer destination, int count)
     {
-      Buffer.BlockCopy(
-        this.rawData,
-        this.position,
-        destination.rawData,
-        0,
-        count);
+      if (count > 0)
+        Buffer.BlockCopy(
+          this.rawData,
+          this.position,
+          destination.rawData,
+          0,
+          count);
       destination.length = count;
       this.IncreasePosition(count);
     }
