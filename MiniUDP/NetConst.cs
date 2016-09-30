@@ -20,6 +20,28 @@
 
 namespace MiniUDP
 {
+  public struct NetVersion
+  {
+    internal readonly byte major;
+    internal readonly byte minor;
+    internal readonly ushort revision;
+
+    public NetVersion(byte major, byte minor, ushort revision)
+    {
+      this.major = major;
+      this.minor = minor;
+      this.revision = revision;
+    }
+
+    internal bool Equals(NetVersion other)
+    {
+      return
+        (this.major == other.major) &&
+        (this.minor == other.minor) &&
+        (this.revision == other.revision);
+    }
+  }
+
   internal enum NetPacketType : byte
   {
     INVALID = 0,
@@ -42,9 +64,18 @@ namespace MiniUDP
     INVALID = 0,
 
     BadVersion,
-    BadUID,
     Closed,
     Full,
+  }
+
+  internal enum NetDisconnectReason : byte
+  {
+    INVALID = 0,
+
+    Timeout,
+    Shutdown,
+    Error,
+    User,
   }
 
   internal enum NetEventType : byte
@@ -69,11 +100,10 @@ namespace MiniUDP
     internal const int SOCKET_TTL = 255;
     #endregion
 
-    #region Packet Sizes
-    public const int MAX_VERSION_KEY_LENGTH = 30;
-    public const int MAX_PACKET_SIZE = 1264;
-    public const int MAX_PACKET_DATA_SIZE = MAX_PACKET_SIZE - NetIO.HEADER_SIZE;
-    public const int MAX_NOTIFICATION_DATA_SIZE = MAX_PACKET_DATA_SIZE - NetEvent.HEADER_SIZE;
+    #region Packet
+    public const int MAX_DATA_SIZE = 1200;
+    public const int MAX_NOTIFICATION_PACK = MAX_DATA_SIZE + NetEvent.HEADER_SIZE;
+    public const byte MIN_DISCONNECT_REASON = 100;
     #endregion
 
     #region Timing

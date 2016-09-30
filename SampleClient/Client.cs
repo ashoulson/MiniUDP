@@ -1,11 +1,28 @@
-﻿//using System;
-//using System.Threading;
-//using System.Collections.Generic;
+﻿using System;
+using System.Threading;
+using System.Collections.Generic;
 
-//using MiniUDP;
+using MiniUDP;
 
-//internal class Client
-//{
+internal class Client
+{
+  private NetConnection connection;
+
+  public Client(string hostAddress)
+  {
+    this.connection = 
+      new NetConnection(new NetVersion(0, 0, 1));
+    this.connection.Start(44444);
+    this.connection.Connect(NetUtil.StringToEndPoint(hostAddress));
+  }
+
+  public void Stop()
+  {
+    this.connection.Stop();
+    this.connection.Cleanup();
+  }
+
+}
 //  private const double HEARTBEAT_RATE = 0.1f;
 //  private const int BUFFER_SIZE = 2048;
 

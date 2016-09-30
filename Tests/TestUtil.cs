@@ -28,16 +28,5 @@ namespace Tests
       Assert.IsTrue(NetUtil.UShortSeqDiff(32768, 0) < 0);
       Assert.IsTrue(NetUtil.UShortSeqDiff(32768, 32768) == 0);
     }
-
-    [TestMethod]
-    public void TestUniqueID()
-    {
-      // Note that there's a very, very, very slim chance this test could fail
-      HashSet<ulong> uniqueIds = new HashSet<ulong>();
-      for (int i = 0; i < 1000; i++)
-        uniqueIds.Add(NetUtil.CreateUniqueID());
-
-      Assert.AreEqual(1000, uniqueIds.Count);
-    }
   }
 }

@@ -7,12 +7,12 @@ class Program
 {
   static void Main(string[] args)
   {
-    Client client = new Client("127.0.0.1:44325", 0.02);
-    client.Start();
+    Client client = new Client("127.0.0.1:42324");
+    //client.Start();
 
     while(true)
     {
-      client.Update();
+      //client.Update();
 
 
       if (Console.KeyAvailable)

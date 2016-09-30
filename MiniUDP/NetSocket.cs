@@ -34,22 +34,14 @@ namespace MiniUDP
     public event SocketFailed ReceiveFailed;
     public event SocketFailed SendFailed;
 
-    public static NetSocket Create()
+    internal static Socket CreateRawSocket()
     {
       Socket socket = 
         new Socket(
           AddressFamily.InterNetwork,
           SocketType.Dgram,
           ProtocolType.Udp);
-      NetSocket.ConfigureSocket(socket);
-      return new NetSocket(socket);
-    }
 
-    /// <summary>
-    /// Configures a socket for sending/receiving data.
-    /// </summary>
-    private static void ConfigureSocket(Socket socket)
-    {
       socket.ReceiveBufferSize = NetConst.SOCKET_BUFFER_SIZE;
       socket.SendBufferSize = NetConst.SOCKET_BUFFER_SIZE;
       socket.Blocking = false;
@@ -66,26 +58,23 @@ namespace MiniUDP
         NetDebug.LogWarning(
           "Failed to set control code for ignoring ICMP port unreachable.");
       }
+
+      return socket;
     }
 
-    private readonly NetByteBuffer receiveBuffer;
+    private readonly byte[] receiveBuffer;
     private readonly Socket socket;
 
     internal NetSocket(Socket socket)
     {
-      this.receiveBuffer = new NetByteBuffer(NetConst.SOCKET_BUFFER_SIZE);
+      this.receiveBuffer = new byte[NetConst.SOCKET_BUFFER_SIZE];
       this.socket = socket;
-    }
-
-    public NetSocket Clone()
-    {
-      return new NetSocket(this.socket);
     }
 
     /// <summary>
     /// Starts the socket using the supplied endpoint.
     /// </summary>
-    public bool Bind(int port)
+    internal bool Bind(int port)
     {
       try
       {
@@ -103,16 +92,23 @@ namespace MiniUDP
       }
     }
 
+    internal void Close()
+    {
+      this.socket.Close();
+    }
+
     /// <summary> 
     /// Attempts to read from OS socket. Returns false if the read fails
     /// or if there is nothing to read.
     /// </summary>
     internal bool TryReceive(
       out IPEndPoint source,
-      out NetByteBuffer buffer)
+      out byte[] buffer,
+      out int length)
     {
       source = null;
       buffer = null;
+      length = 0;
 
       if (this.socket.Poll(0, SelectMode.SelectRead) == false)
         return false;
@@ -120,17 +116,15 @@ namespace MiniUDP
       try
       {
         EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
-        this.receiveBuffer.Reset();
 
-        int receivedBytes =
+        length =
           this.socket.ReceiveFrom(
-            this.receiveBuffer.rawData,
-            this.receiveBuffer.rawData.Length,
+            this.receiveBuffer,
+            NetConst.SOCKET_BUFFER_SIZE,
             SocketFlags.None,
             ref endPoint);
-        this.receiveBuffer.length = receivedBytes;
 
-        if (receivedBytes > 0)
+        if (length > 0)
         {
           source = endPoint as IPEndPoint;
           buffer = this.receiveBuffer;
@@ -153,18 +147,19 @@ namespace MiniUDP
     /// Returns false if the send failed.
     /// </summary>
     internal bool TrySend(
-      NetByteBuffer sendBuffer,
-      IPEndPoint destination)
+      IPEndPoint destination,
+      byte[] buffer,
+      int length)
     {
       try
       {
         int bytesSent =
           this.socket.SendTo(
-            sendBuffer.rawData,
-            sendBuffer.length,
+            buffer,
+            length,
             SocketFlags.None,
             destination);
-        return (bytesSent == sendBuffer.length);
+        return (bytesSent == length);
       }
       catch (SocketException exception)
       {

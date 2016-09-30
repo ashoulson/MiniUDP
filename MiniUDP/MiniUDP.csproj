@@ -38,7 +38,6 @@
   <ItemGroup>
     <Compile Include="Data\NetEvent.cs" />
     <Compile Include="Data\NetIO.cs" />
-    <Compile Include="Data\NetByteBuffer.cs" />
     <Compile Include="NetUtil.cs" />
     <Compile Include="NetConst.cs" />
     <Compile Include="NetConnection.cs" />

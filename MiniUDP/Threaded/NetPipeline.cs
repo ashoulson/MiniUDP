@@ -7,7 +7,7 @@ namespace MiniUDP
   internal class NetPipeline<T>
   {
     private Queue<T> queue;
-    private int count;
+    private volatile int count;
 
     public NetPipeline()
     {
