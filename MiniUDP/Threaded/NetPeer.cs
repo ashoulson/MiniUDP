@@ -24,9 +24,19 @@ using System.Net;
 
 namespace MiniUDP
 {
+  internal enum NetPeerStatus
+  {
+    Connecting,
+    Connected,
+    Closed,
+  }
+
   public class NetPeer
   {
-    public bool IsConnected { get; private set; }
+    public bool IsConnected { get { return this.status == NetPeerStatus.Connected; } }
+    public bool IsClient { get { return this.isClient; } }
+
+    private volatile NetPeerStatus status;
 
     #region Main Thread
     // This region should only be accessed by the MAIN thread
@@ -34,7 +44,7 @@ namespace MiniUDP
     public object UserData { get; set; }
     public IPEndPoint EndPoint { get { return this.endPoint; } }
 
-    private byte outgoingPayloadSequence;
+    private ushort outgoingPayloadSequence;
     #endregion
 
     #region Background Thread
@@ -42,15 +52,16 @@ namespace MiniUDP
 
     internal IEnumerable<NetEvent> OutgoingNotifications { get { return this.outgoing; } }
     internal bool HasNotifications { get { return (this.outgoing.Count > 0); } }
+    internal NetPeerStatus Status { get { return this.status; } }
 
     private readonly Queue<NetEvent> outgoing;
-    private readonly uint uid;
     private readonly IPEndPoint endPoint;
+    private readonly bool isClient; // True iff the *remote* peer is a client
     private ushort notificationSequence;
     private long creationTick;
     private long expireTick;
 
-    internal NetPeer(IPEndPoint endPoint, long creationTick, uint uid)
+    internal NetPeer(IPEndPoint endPoint, bool isClient, long creationTick)
     {
       // Probably no need to pool this class since users may want to hold on
       // to them after closing and they aren't created all that often anyway
@@ -59,18 +70,20 @@ namespace MiniUDP
 
       this.outgoing = new Queue<NetEvent>();
       this.endPoint = endPoint;
-      this.uid = uid;
+      this.isClient = true;
 
       this.notificationSequence = 0;
       this.creationTick = creationTick;
       this.expireTick = creationTick + NetConst.CONNECTION_TIME_OUT;
 
-      // We only create a peer if it's a new connection, so this starts true
-      this.IsConnected = true;
+      if (isClient) // Client peers are created after a successful connection
+        this.status = NetPeerStatus.Connected;
+      else // Host peers are created in the process of to connecting to them
+        this.status = NetPeerStatus.Connecting;
     }
 
     /// <summary>
-    /// Called on the background session thread.
+    /// Queues a new notification to be send out reliably during ticks.
     /// </summary>
     internal void QueueNotification(NetEvent data)
     {
@@ -86,7 +99,7 @@ namespace MiniUDP
     }
 
     /// <summary>
-    /// Called on the background session thread.
+    /// Cleans up all notifications older than the given ack.
     /// </summary>
     internal void CleanNotifications(
       ushort notificationAck,
@@ -99,6 +112,19 @@ namespace MiniUDP
           break;
         deallocate.Invoke(this.outgoing.Dequeue());
       }
+    }
+
+    /// <summary>
+    /// Make sure this is called before exposing the peer to the main thread.
+    /// </summary>
+    internal void Connected()
+    {
+      this.status = NetPeerStatus.Connected;
+    }
+
+    internal void Disconnected()
+    {
+      this.status = NetPeerStatus.Closed;
     }
 
     /// <summary>

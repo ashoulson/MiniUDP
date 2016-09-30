@@ -19,16 +19,14 @@
 */
 
 using System;
-using System.Security.Cryptography;
+using System.Net;
 
 namespace MiniUDP
 {
-  internal static class NetUtil
+  public static class NetUtil
   {
-    private const int UID_GEN_RETRIES = 1000;
-
     /// <summary>
-    /// Compares two bytes with wrap-around arithmetic
+    /// Compares two bytes with wrap-around arithmetic.
     /// </summary>
     internal static int ByteSeqDiff(byte a, byte b)
     {
@@ -37,7 +35,7 @@ namespace MiniUDP
     }
 
     /// <summary>
-    /// Compares two ushorts with wrap-around arithmetic
+    /// Compares two ushorts with wrap-around arithmetic.
     /// </summary>
     internal static int UShortSeqDiff(ushort a, ushort b)
     {
@@ -46,14 +44,21 @@ namespace MiniUDP
     }
 
     /// <summary>
-    /// Creates a 32-bit cryptographically random unique ID
+    /// Returns an IPv4 IP:Port string as an IPEndpoint.
     /// </summary>
-    /// <returns></returns>
-    internal static uint CreateUniqueID()
+    public static IPEndPoint StringToEndPoint(string address)
     {
-      byte[] bytes = new byte[4];
-      RandomNumberGenerator.Create().GetBytes(bytes);
-      return BitConverter.ToUInt32(bytes, 0);
+      string[] split = address.Split(':');
+      string stringAddress = split[0];
+      string stringPort = split[1];
+
+      int port = int.Parse(stringPort);
+      IPAddress ipaddress = IPAddress.Parse(stringAddress);
+      IPEndPoint endpoint = new IPEndPoint(ipaddress, port);
+
+      if (endpoint == null)
+        throw new ArgumentException("Failed to parse address: " + address);
+      return endpoint;
     }
   }
 }

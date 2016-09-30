@@ -18,18 +18,10 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
+using System;
+
 namespace MiniUDP
 {
-  public interface INetMessageOut
-  {
-    INetByteWriter Data { get; }
-  }
-
-  public interface INetMessageIn
-  {
-    INetByteReader Data { get; }
-  }
-
   /// <summary>
   /// A multipurpose class (ab)used in two ways. Used for passing messages
   /// between threads internally (called "events" in this instance) on the 
@@ -38,71 +30,100 @@ namespace MiniUDP
   /// </summary>
   internal class NetEvent
     : INetPoolable<NetEvent>
-    , INetMessageOut
-    , INetMessageIn
   {
-    public const int HEADER_SIZE = 
-      sizeof(ushort); // Byte count
+    #region Header
+    internal const int HEADER_SIZE = sizeof(ushort); // Byte count
+
+    private int WriteHeader(byte[] destBuf, int position)
+    {
+      NetIO.WriteUShort(destBuf, position, this.length);
+      return NetEvent.HEADER_SIZE;
+    }
+
+    private int ReadHeader(byte[] sourceBuf, int position, out ushort length)
+    {
+      length = NetIO.ReadUShort(buffer, position);
+      return NetEvent.HEADER_SIZE;
+    }
+    #endregion
 
     void INetPoolable<NetEvent>.Reset() { this.Reset(); }
-    INetByteWriter INetMessageOut.Data { get { return this.eventData; } }
-    INetByteReader INetMessageIn.Data { get { return this.eventData; } }
 
-    // Net-encoded data
-    private ushort length { get { return (ushort)this.eventData.Length; } }
-    private readonly NetByteBuffer eventData;
+    // Buffer for encoded user data
+    private readonly byte[] buffer;
+    private ushort length;
 
     // Additional data for passing events around internally, not synchronized
     internal NetEventType EventType { get; private set; }
-    internal NetPeer Peer { get; private set; } // Associated peer
-    internal int Value { get; private set; }    // Sequence#, Error code, etc.
+    internal NetPeer Peer { get; private set; }  // Associated peer
+    internal int OtherData { get; private set; } // Sequence, Error code, etc.
 
     // Helpers
     internal int PackSize { get { return this.length + NetEvent.HEADER_SIZE; } }
-    internal ushort Sequence { get { return (ushort)this.Value; } }
+    internal ushort Sequence { get { return (ushort)this.OtherData; } }
 
     public NetEvent()
     {
-      this.eventData = new NetByteBuffer(NetConst.MAX_NOTIFICATION_DATA_SIZE);
+      this.buffer = new byte[NetConst.MAX_DATA_SIZE];
       this.Reset();
+    }
+
+    private void Reset()
+    {
+      this.length = 0;
+      this.EventType = NetEventType.INVALID;
+      this.Peer = null;
+      this.OtherData = 0;
     }
 
     internal void Initialize(
       NetEventType type, 
       NetPeer peer, 
-      int value,
-      NetByteBuffer toAppend)
+      int otherData)
     {
       this.EventType = type;
       this.Peer = peer;
-      this.Value = value;
-      if (toAppend != null)
-        this.eventData.Overwrite(toAppend);
+      this.OtherData = otherData;
+
+      this.length = 0;
     }
 
-    private void Reset()
+    internal void Initialize(
+      NetEventType type,
+      NetPeer peer,
+      int otherData,
+      byte[] buffer,
+      int position,
+      int length)
     {
-      this.eventData.Reset();
-      this.EventType = NetEventType.INVALID;
-      this.Peer = null;
-      this.Value = 0;
+      if (length > NetConst.MAX_DATA_SIZE)
+        throw new OverflowException("Data too long for NetEvent");
+
+      this.EventType = type;
+      this.Peer = peer;
+      this.OtherData = otherData;
+
+      Array.Copy(buffer, position, this.buffer, 0, length);
+      this.length = (ushort)length;
     }
 
-    internal void Write(NetByteBuffer destBuffer)
+    internal int Write(byte[] destBuf, int position)
     {
-      destBuffer.Write(this.length);
-      destBuffer.Append(this.eventData);
+      position += this.WriteHeader(destBuf, position);
+      Array.Copy(this.buffer, 0, destBuf, position, this.length);
+      return position + this.length;
     }
 
-    internal void Read(NetByteBuffer sourceBuffer)
+    internal int Read(byte[] sourceBuf, int position)
     {
-      ushort byteSize = sourceBuffer.ReadUShort();
-      sourceBuffer.Extract(this.eventData, byteSize);
+      position += this.ReadHeader(sourceBuf, position, out this.length);
+      Array.Copy(sourceBuf, position, this.buffer, 0, this.length);
+      return position + this.length;
     }
 
     internal void SetSequence(ushort sequence)
     {
-      this.Value = sequence;
+      this.OtherData = sequence;
     }
   }
 }
