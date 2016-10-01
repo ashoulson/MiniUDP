@@ -2,178 +2,188 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Diagnostics;
 
 namespace MiniUDP
 {
   internal static class NetIO
   {
-    internal static NetPacketType GetPacketType(byte[] buffer)
+    internal const ulong MASK_BOOL           = (1 << 1)  - 1;
+    internal const ulong MASK_TYPE           = (1 << 3)  - 1;
+    internal const ulong MASK_LOSS           = (1 << 7)  - 1;
+    internal const ulong MASK_PROCESSING     = (1 << 13) - 1;
+    internal const ulong MASK_BIG_SEQUENCE   = (1 << 14) - 1;
+    internal const ulong MASK_SMALL_SEQUENCE = (1 << 6)  - 1;
+    internal const ulong MASK_BIG_PARAM      = (1 << 8)  - 1;
+    internal const ulong MASK_SMALL_PARAM    = (1 << 4)  - 1;
+
+    internal static NetPacketType ReadType(byte[] buffer)
     {
-      return (NetPacketType)buffer[0];
+      byte bufByte = buffer[0];
+      if ((bufByte & 0x80) == 0x80)
+        return NetPacketType.Payload;
+      return (NetPacketType)(bufByte >> 4);
     }
 
-    #region Protocol
-    // Protocol packets are always 5 bytes. This is a bit wasteful but we're
-    // already sending a 16-40B+ header regardless, and these are sent rarely.
-    internal const int PROTOCOL_SIZE = 5;
-
-    //                 Byte | Byte      | Byte     | UShort
-    //                 --------------------------------------
-    // ConnectRequest: Type | Major     | Minor    | Revision
-    // ConnectAccept:  Type | 0         | 0        | 0
-    // ConnectReject:  Type | Reason    | 0        | 0
-    // Disconnect:     Type | Reason    | 0        | 0
-    // Ping:           Type | Sequence  | Loss     | Ping
-    // Pong:           Type | Sequence  | Loss     | 0
-
-    #region Write
-    internal static int WriteConnectRequest(byte[] buffer, byte major, byte minor, ushort revision)
-    {
-      return NetIO.WriteProtocol(buffer, NetPacketType.ConnectRequest, major, minor, revision);
-    }
-
-    internal static int WriteConnectAccept(byte[] buffer)
-    {
-      return NetIO.WriteProtocol(buffer, NetPacketType.ConnectAccept);
-    }
-
-    internal static int WriteConnectReject(byte[] buffer, byte reason)
-    {
-      return NetIO.WriteProtocol(buffer, NetPacketType.ConnectReject, reason);
-    }
-
-    internal static int WriteDisconnect(byte[] buffer, byte reason)
-    {
-      return NetIO.WriteProtocol(buffer, NetPacketType.Disconnect, reason);
-    }
-
-    internal static int WritePing(byte[] buffer, byte sequence, byte loss, ushort ping)
-    {
-      return NetIO.WriteProtocol(buffer, NetPacketType.Ping, sequence, loss, ping);
-    }
-
-    internal static int WritePong(byte[] buffer, byte sequence, byte loss)
-    {
-      return NetIO.WriteProtocol(buffer, NetPacketType.Pong, sequence, loss);
-    }
-    #endregion
-
-    #region Read
-    internal static void ReadConnectRequest(byte[] buffer, out byte major, out byte minor, out ushort revision)
-    {
-      NetIO.ReadProtocol(buffer, out major, out minor, out revision);
-    }
-
-    internal static void ReadConnectAccept(byte[] buffer)
-    {
-      // Nothing to read
-    }
-
-    internal static void ReadConnectReject(byte[] buffer, out byte reason)
-    {
-      NetIO.ReadProtocol(buffer, out reason);
-    }
-
-    internal static void ReadDisconnect(byte[] buffer, out byte reason)
-    {
-      NetIO.ReadProtocol(buffer, out reason);
-    }
-
-    internal static void ReadPing(byte[] buffer, out byte sequence, out byte loss, out ushort ping)
-    {
-      NetIO.ReadProtocol(buffer, out sequence, out loss, out ping);
-    }
-
-    internal static void ReadPong(byte[] buffer, out byte sequence, out byte loss)
-    {
-      NetIO.ReadProtocol(buffer, out sequence, out loss);
-    }
-    #endregion
-
-    #region Serialization
-    private static int WriteProtocol(
+    internal static int PackPayloadHeader(
       byte[] buffer,
-      NetPacketType type)
+      ushort sequence)
     {
-      return NetIO.WriteProtocol(buffer, type, 0, 0, 0);
+      NetDebug.Assert((sequence & NetIO.MASK_BIG_SEQUENCE) == sequence, "Truncating sequence");
+
+      ulong value =                                   // Size
+        (NetIO.MASK_BOOL         & 1)        << 15 |  // 1
+        (NetIO.MASK_BIG_SEQUENCE & sequence) << 0;    // 14 (1 wasted)
+      NetIO.PackU16(buffer, 0, (ushort)value); // Total: 16
+      return sizeof(ushort);
     }
 
-    private static int WriteProtocol(
+    internal static int ReadPayloadHeader(
       byte[] buffer,
-      NetPacketType type,
-      byte b1)
+      out ushort sequence)
     {
-      return NetIO.WriteProtocol(buffer, type, b1, 0, 0);
+      ulong data = NetIO.ReadU16(buffer, 0);
+      sequence = (ushort)(NetIO.MASK_BIG_SEQUENCE & (data >> 0));
+      return sizeof(ushort);
     }
 
-    private static int WriteProtocol(
+    internal static int PackProtocolHeader(
       byte[] buffer,
-      NetPacketType type,
-      byte b1,
-      byte b2)
+      NetPacketType type, 
+      byte smallParam, 
+      byte bigParam)
     {
-      return NetIO.WriteProtocol(buffer, type, b1, b2, 0);
+      NetDebug.Assert(((ulong)type & NetIO.MASK_TYPE) == (ulong)type, "Truncating type");
+      NetDebug.Assert((smallParam & NetIO.MASK_SMALL_PARAM) == smallParam, "Truncating smallParam");
+      NetDebug.Assert((bigParam & NetIO.MASK_BIG_PARAM) == bigParam, "Truncating bigParam");
+
+      ulong value =                                    // Size
+        (NetIO.MASK_TYPE        & (ulong)type) << 12 | // 4
+        (NetIO.MASK_SMALL_PARAM & smallParam)  << 8  | // 4
+        (NetIO.MASK_BIG_PARAM   & bigParam)    << 0;   // 8
+      NetIO.PackU16(buffer, 0, (ushort)value);  // Total: 16
+      return sizeof(ushort);
     }
 
-    private static int WriteProtocol(
+    internal static int ReadProtocolHeader(
       byte[] buffer,
-      NetPacketType type,
-      byte b1,
-      byte b2,
-      ushort s)
+      out NetPacketType type,
+      out byte smallParam,
+      out byte bigParam)
     {
-      buffer[0] = (byte)type;
-      buffer[1] = b1;
-      buffer[2] = b2;
-      NetIO.WriteUShort(buffer, 3, s);
-      return NetIO.PROTOCOL_SIZE;
+      ulong data = NetIO.ReadU16(buffer, 0);
+      type =       (NetPacketType)(NetIO.MASK_TYPE        & (data >> 12));
+      smallParam = (byte)         (NetIO.MASK_SMALL_PARAM & (data >> 8));
+      bigParam =   (byte)         (NetIO.MASK_BIG_PARAM   & (data >> 0));
+      return sizeof(ushort);
     }
 
-    private static void ReadProtocol(
+    internal static int PackCarrierHeader(
       byte[] buffer,
-      out byte b1)
+      byte pingSeq, 
+      byte pongSeq,
+      byte loss,
+      ushort processing,
+      ushort messageAck,
+      ushort messageSeq)
     {
-      b1 = buffer[1];
+      NetDebug.Assert((pingSeq & NetIO.MASK_SMALL_SEQUENCE) == pingSeq, "Truncating pingSeq");
+      NetDebug.Assert((pongSeq & NetIO.MASK_SMALL_SEQUENCE) == pongSeq, "Truncating pongSeq");
+      NetDebug.Assert((loss & NetIO.MASK_LOSS) == loss, "Truncating loss");
+      NetDebug.Assert((processing & NetIO.MASK_PROCESSING) == processing, "Truncating processing");
+      NetDebug.Assert((messageAck & NetIO.MASK_BIG_SEQUENCE) == messageAck, "Truncating messageAck");
+      NetDebug.Assert((messageSeq & NetIO.MASK_BIG_SEQUENCE) == messageSeq, "Truncating messageSeq");
+
+      ulong value =                                                        // Size
+        (NetIO.MASK_TYPE           & (ulong)NetPacketType.Carrier) << 60 | // 4
+        (NetIO.MASK_SMALL_SEQUENCE & pingSeq)                      << 54 | // 6
+        (NetIO.MASK_SMALL_SEQUENCE & pongSeq)                      << 48 | // 6
+        (NetIO.MASK_LOSS           & loss)                         << 41 | // 7
+        (NetIO.MASK_PROCESSING     & processing)                   << 28 | // 13
+        (NetIO.MASK_BIG_SEQUENCE   & messageAck)                   << 14 | // 14
+        (NetIO.MASK_BIG_SEQUENCE   & messageSeq)                   << 0;   // 14
+      NetIO.PackU64(buffer, 0, value);                              // Total: 64
+      return sizeof(ulong);
     }
 
-    private static void ReadProtocol(
+    internal static int ReadCarrierHeader(
       byte[] buffer,
-      out byte b1,
-      out byte b2)
+      out byte pingSeq,
+      out byte pongSeq,
+      out byte loss,
+      out ushort processing,
+      out ushort messageAck,
+      out ushort messageSeq)
     {
-      b1 = buffer[1];
-      b2 = buffer[2];
+      ulong data = NetIO.ReadU64(buffer, 0);
+      pingSeq =    (byte)  (NetIO.MASK_SMALL_SEQUENCE & (data >> 54));
+      pongSeq =    (byte)  (NetIO.MASK_SMALL_SEQUENCE & (data >> 48));
+      loss =       (byte)  (NetIO.MASK_LOSS           & (data >> 41));
+      processing = (ushort)(NetIO.MASK_PROCESSING     & (data >> 28));
+      messageAck = (ushort)(NetIO.MASK_BIG_SEQUENCE   & (data >> 14));
+      messageSeq = (ushort)(NetIO.MASK_BIG_SEQUENCE   & (data >> 0));
+      return sizeof(ushort);
     }
 
-    private static void ReadProtocol(
+    /// <summary>
+    /// Encodes a U64 into a buffer at a location in Big Endian order.
+    /// </summary>
+    private static void PackU64(
       byte[] buffer,
-      out byte b1,
-      out byte b2,
-      out ushort s)
+      int position,
+      ulong value)
     {
-      b1 = buffer[1];
-      b2 = buffer[2];
-      s = ReadUShort(buffer, 3);
+      buffer[position + 0] = (byte)(value >> (8 * 7));
+      buffer[position + 1] = (byte)(value >> (8 * 6));
+      buffer[position + 2] = (byte)(value >> (8 * 5));
+      buffer[position + 3] = (byte)(value >> (8 * 4));
+      buffer[position + 4] = (byte)(value >> (8 * 3));
+      buffer[position + 5] = (byte)(value >> (8 * 2));
+      buffer[position + 6] = (byte)(value >> (8 * 1));
+      buffer[position + 7] = (byte)(value >> (8 * 0));
     }
-    #endregion
-    #endregion
 
-    internal static void WriteUShort(
+    /// <summary>
+    /// Reads a U64 from a buffer at a location in Big Endian order.
+    /// </summary>
+    private static ulong ReadU64(
+      byte[] buffer,
+      int position)
+    {
+      ulong read =
+        ((ulong)buffer[position + 0] << (8 * 7)) |
+        ((ulong)buffer[position + 1] << (8 * 6)) |
+        ((ulong)buffer[position + 2] << (8 * 5)) |
+        ((ulong)buffer[position + 3] << (8 * 4)) |
+        ((ulong)buffer[position + 4] << (8 * 3)) |
+        ((ulong)buffer[position + 5] << (8 * 2)) |
+        ((ulong)buffer[position + 6] << (8 * 1)) |
+        ((ulong)buffer[position + 7] << (8 * 0));
+      return (ushort)read;
+    }
+
+    /// <summary>
+    /// Encodes a U16 into a buffer at a location in Big Endian order.
+    /// </summary>
+    internal static void PackU16(
       byte[] buffer,
       int position,
       ushort value)
     {
-      buffer[position + 0] = (byte)(value >> (8 * 0));
-      buffer[position + 1] = (byte)(value >> (8 * 1));
+      buffer[position + 0] = (byte)(value >> (8 * 1));
+      buffer[position + 1] = (byte)(value >> (8 * 0));
     }
 
-    internal static ushort ReadUShort(
+    /// <summary>
+    /// Reads a U16 from a buffer at a location in Big Endian order.
+    /// </summary>
+    internal static ushort ReadU16(
       byte[] buffer,
       int position)
     {
       int read =
-        (buffer[position + 0] << (8 * 0)) |
-        (buffer[position + 1] << (8 * 1));
+        (buffer[position + 0] << (8 * 1)) |
+        (buffer[position + 1] << (8 * 0));
       return (ushort)read;
     }
   }

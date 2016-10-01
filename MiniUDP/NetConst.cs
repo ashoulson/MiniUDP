@@ -44,19 +44,17 @@ namespace MiniUDP
 
   internal enum NetPacketType : byte
   {
-    INVALID = 0,
+    INVALID       = 0,
+    Connect       = 1,
+    Disconnect    = 2,
+    ConnectAccept = 3,
+    ConnectReject = 4,
+    Carrier       = 5,
+    UNUSED1       = 6,
+    UNUSED2       = 7,
+    // Will need to expand the header to add any more
 
-    // Protocol-Level Messages
-    ConnectRequest,
-    ConnectAccept,
-    ConnectReject,
-    Disconnect,
-    Ping,
-    Pong,
-
-    // User Data Carriers
-    Payload,
-    Notification,
+    Payload       = 8, // Special representation
   }
 
   internal enum NetRejectReason : byte
@@ -104,6 +102,8 @@ namespace MiniUDP
     public const int MAX_DATA_SIZE = 1200;
     public const int MAX_NOTIFICATION_PACK = MAX_DATA_SIZE + NetEvent.HEADER_SIZE;
     public const byte MIN_DISCONNECT_REASON = 100;
+
+    public const int MAX_VERSION_BYTES = (int)NetIO.MASK_SMALL_PARAM;
     #endregion
 
     #region Timing

@@ -34,17 +34,17 @@ namespace MiniUDP
     #region Header
     internal const int HEADER_SIZE = sizeof(ushort); // Byte count
 
-    private int WriteHeader(byte[] destBuf, int position)
-    {
-      NetIO.WriteUShort(destBuf, position, this.length);
-      return NetEvent.HEADER_SIZE;
-    }
+    //private int WriteHeader(byte[] destBuf, int position)
+    //{
+    //  NetIO.WriteUShort(destBuf, position, this.length);
+    //  return NetEvent.HEADER_SIZE;
+    //}
 
-    private int ReadHeader(byte[] sourceBuf, int position, out ushort length)
-    {
-      length = NetIO.ReadUShort(buffer, position);
-      return NetEvent.HEADER_SIZE;
-    }
+    //private int ReadHeader(byte[] sourceBuf, int position, out ushort length)
+    //{
+    //  length = NetIO.ReadUShort(buffer, position);
+    //  return NetEvent.HEADER_SIZE;
+    //}
     #endregion
 
     void INetPoolable<NetEvent>.Reset() { this.Reset(); }
@@ -107,19 +107,19 @@ namespace MiniUDP
       this.length = (ushort)length;
     }
 
-    internal int Write(byte[] destBuf, int position)
-    {
-      position += this.WriteHeader(destBuf, position);
-      Array.Copy(this.buffer, 0, destBuf, position, this.length);
-      return position + this.length;
-    }
+    //internal int Write(byte[] destBuf, int position)
+    //{
+    //  position += this.WriteHeader(destBuf, position);
+    //  Array.Copy(this.buffer, 0, destBuf, position, this.length);
+    //  return position + this.length;
+    //}
 
-    internal int Read(byte[] sourceBuf, int position)
-    {
-      position += this.ReadHeader(sourceBuf, position, out this.length);
-      Array.Copy(sourceBuf, position, this.buffer, 0, this.length);
-      return position + this.length;
-    }
+    //internal int Read(byte[] sourceBuf, int position)
+    //{
+    //  position += this.ReadHeader(sourceBuf, position, out this.length);
+    //  Array.Copy(sourceBuf, position, this.buffer, 0, this.length);
+    //  return position + this.length;
+    //}
 
     internal void SetSequence(ushort sequence)
     {
