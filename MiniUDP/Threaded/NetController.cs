@@ -251,192 +251,192 @@ namespace MiniUDP
     /// </summary>
     private void ReadPacket(IPEndPoint source, byte[] buffer, int length)
     {
-      NetPacketType type = NetIO.GetPacketType(buffer);
+      //NetPacketType type = NetIO.GetPacketType(buffer);
 
-      // Special case for connect request since no peer exists
-      if (type == NetPacketType.ConnectRequest)
-      {
-        this.HandleConnectRequest(source, buffer, length);
-        return;
-      }
+      //// Special case for connect request since no peer exists
+      //if (type == NetPacketType.ConnectRequest)
+      //{
+      //  this.HandleConnectRequest(source, buffer, length);
+      //  return;
+      //}
 
-      NetPeer peer;
-      if (this.peers.TryGetValue(source, out peer))
-      {
-        switch (type)
-        {
-          case NetPacketType.ConnectAccept:
-            this.HandleConnectAccept(peer, buffer, length);
-            break;
+      //NetPeer peer;
+      //if (this.peers.TryGetValue(source, out peer))
+      //{
+      //  switch (type)
+      //  {
+      //    case NetPacketType.ConnectAccept:
+      //      this.HandleConnectAccept(peer, buffer, length);
+      //      break;
 
-          case NetPacketType.ConnectReject:
-            this.HandleConnectReject(peer, buffer, length);
-            break;
+      //    case NetPacketType.ConnectReject:
+      //      this.HandleConnectReject(peer, buffer, length);
+      //      break;
 
-          case NetPacketType.Disconnect:
-            this.HandleDisconnect(peer, buffer, length);
-            break;
+      //    case NetPacketType.Disconnect:
+      //      this.HandleDisconnect(peer, buffer, length);
+      //      break;
 
-          case NetPacketType.Ping:
-            this.HandlePing(peer, buffer, length);
-            break;
+      //    case NetPacketType.Ping:
+      //      this.HandlePing(peer, buffer, length);
+      //      break;
 
-          case NetPacketType.Pong:
-            this.HandlePong(peer, buffer, length);
-            break;
+      //    case NetPacketType.Pong:
+      //      this.HandlePong(peer, buffer, length);
+      //      break;
 
-            //case NetPacketType.Payload:
-            //  this.HandlePayload(source, buffer, length);
-            //  break;
+      //      //case NetPacketType.Payload:
+      //      //  this.HandlePayload(source, buffer, length);
+      //      //  break;
 
-            //case NetPacketType.Notification:
-            //  this.HandleNotification(source, buffer, length);
-            //  break;
-        }
-      }
+      //      //case NetPacketType.Notification:
+      //      //  this.HandleNotification(source, buffer, length);
+      //      //  break;
+      //  }
+      //}
     }
     #endregion
 
     #region Protocol Handling
-    private void HandleConnectRequest(
-      IPEndPoint source, 
-      byte[] buffer, 
-      int length)
-    {
-      byte major;
-      byte minor;
-      ushort revision;
-      NetIO.ReadConnectRequest(
-        buffer,
-        out major,
-        out minor,
-        out revision);
-      NetVersion version = new NetVersion(major, minor, revision);
+    //private void HandleConnectRequest(
+    //  IPEndPoint source, 
+    //  byte[] buffer, 
+    //  int length)
+    //{
+    //  byte major;
+    //  byte minor;
+    //  ushort revision;
+    //  NetIO.ReadConnectRequest(
+    //    buffer,
+    //    out major,
+    //    out minor,
+    //    out revision);
+    //  NetVersion version = new NetVersion(major, minor, revision);
 
-      if (this.ShouldCreatePeer(source, version) == false)
-        return;
+    //  if (this.ShouldCreatePeer(source, version) == false)
+    //    return;
 
-      // Create and add the new peer as a client
-      NetPeer newPeer = new NetPeer(source, true, this.Timestamp);
-      this.peers.Add(source, newPeer);
+    //  // Create and add the new peer as a client
+    //  NetPeer newPeer = new NetPeer(source, true, this.Timestamp);
+    //  this.peers.Add(source, newPeer);
 
-      // Queue the event out to the main thread to receive the connection
-      NetEvent connectedEvent = 
-        this.CreateEvent(NetEventType.PeerConnected, newPeer, 0);
-      this.eventOut.Enqueue(connectedEvent);
-    }
+    //  // Queue the event out to the main thread to receive the connection
+    //  NetEvent connectedEvent = 
+    //    this.CreateEvent(NetEventType.PeerConnected, newPeer, 0);
+    //  this.eventOut.Enqueue(connectedEvent);
+    //}
 
-    private void HandleConnectAccept(
-      NetPeer peer,
-      byte[] buffer,
-      int length)
-    {
-      NetDebug.Assert(peer.IsClient == false, "Got accept from client");
-      if (peer.IsConnected || peer.IsClient)
-        return;
+    //private void HandleConnectAccept(
+    //  NetPeer peer,
+    //  byte[] buffer,
+    //  int length)
+    //{
+    //  NetDebug.Assert(peer.IsClient == false, "Got accept from client");
+    //  if (peer.IsConnected || peer.IsClient)
+    //    return;
 
-      peer.Connected();
-      this.eventOut.Enqueue(
-        this.CreateEvent(NetEventType.Connected, peer, 0));
-    }
+    //  peer.Connected();
+    //  this.eventOut.Enqueue(
+    //    this.CreateEvent(NetEventType.Connected, peer, 0));
+    //}
 
-    private void HandleConnectReject(
-      NetPeer peer,
-      byte[] buffer,
-      int length)
-    {
-      NetDebug.Assert(peer.IsClient == false, "Got reject from client");
-      if (peer.IsConnected || peer.IsClient)
-        return;
+    //private void HandleConnectReject(
+    //  NetPeer peer,
+    //  byte[] buffer,
+    //  int length)
+    //{
+    //  NetDebug.Assert(peer.IsClient == false, "Got reject from client");
+    //  if (peer.IsConnected || peer.IsClient)
+    //    return;
 
-      this.peers.Remove(peer.EndPoint);
-      peer.Disconnected();
+    //  this.peers.Remove(peer.EndPoint);
+    //  peer.Disconnected();
 
-      byte reason;
-      NetIO.ReadConnectReject(buffer, out reason);
-      this.eventOut.Enqueue(
-        this.CreateEvent(NetEventType.Rejected, peer, reason));
-    }
+    //  byte reason;
+    //  NetIO.ReadConnectReject(buffer, out reason);
+    //  this.eventOut.Enqueue(
+    //    this.CreateEvent(NetEventType.Rejected, peer, reason));
+    //}
 
-    private void HandleDisconnect(
-      NetPeer peer,
-      byte[] buffer,
-      int length)
-    {
-      if (peer.IsConnected == false)
-        return;
+    //private void HandleDisconnect(
+    //  NetPeer peer,
+    //  byte[] buffer,
+    //  int length)
+    //{
+    //  if (peer.IsConnected == false)
+    //    return;
 
-      this.peers.Remove(peer.EndPoint);
-      peer.Disconnected();
+    //  this.peers.Remove(peer.EndPoint);
+    //  peer.Disconnected();
 
-      byte reason;
-      NetIO.ReadDisconnect(buffer, out reason);
-      this.eventOut.Enqueue(
-        this.CreateEvent(NetEventType.PeerDisconnected, peer, reason));
-    }
+    //  byte reason;
+    //  NetIO.ReadDisconnect(buffer, out reason);
+    //  this.eventOut.Enqueue(
+    //    this.CreateEvent(NetEventType.PeerDisconnected, peer, reason));
+    //}
 
-    private void HandlePing(
-      NetPeer peer,
-      byte[] buffer,
-      int length)
-    {
-      NetDebug.Assert(peer.IsClient == false, "Got ping from client");
-      if ((peer.IsConnected == false) || peer.IsClient)
-        return;
+    //private void HandlePing(
+    //  NetPeer peer,
+    //  byte[] buffer,
+    //  int length)
+    //{
+    //  NetDebug.Assert(peer.IsClient == false, "Got ping from client");
+    //  if ((peer.IsConnected == false) || peer.IsClient)
+    //    return;
 
-      byte sequence;
-      byte loss;
-      ushort remotePing;
-      NetIO.ReadPing(buffer, out sequence, out loss, out remotePing);
+    //  byte sequence;
+    //  byte loss;
+    //  ushort remotePing;
+    //  NetIO.ReadPing(buffer, out sequence, out loss, out remotePing);
 
-      // TODO: Apply loss and remotePing
+    //  // TODO: Apply loss and remotePing
 
-      this.SendPong(peer, sequence);
-    }
+    //  this.SendPong(peer, sequence);
+    //}
 
-    private void HandlePong(
-      NetPeer peer,
-      byte[] buffer,
-      int length)
-    {
-      NetDebug.Assert(peer.IsClient, "Got pong from host");
-      if ((peer.IsConnected == false) || (peer.IsClient == false))
-        return;
+    //private void HandlePong(
+    //  NetPeer peer,
+    //  byte[] buffer,
+    //  int length)
+    //{
+    //  NetDebug.Assert(peer.IsClient, "Got pong from host");
+    //  if ((peer.IsConnected == false) || (peer.IsClient == false))
+    //    return;
 
-      byte sequence;
-      byte loss;
-      NetIO.ReadPong(buffer, out sequence, out loss);
+    //  byte sequence;
+    //  byte loss;
+    //  NetIO.ReadPong(buffer, out sequence, out loss);
 
-      // TODO: Calculate ping
-      // TODO: Apply loss
-    }
+    //  // TODO: Calculate ping
+    //  // TODO: Apply loss
+    //}
     #endregion
 
     #region Packet Send
     private void SendConnectionRequest(NetPeer peer)
     {
-      int length =
-        NetIO.WriteConnectRequest(
-          this.reusableBuffer,
-          this.version.major,
-          this.version.minor,
-          this.version.revision);
-      this.socket.TrySend(peer.EndPoint, this.reusableBuffer, length);
+      //int length =
+      //  NetIO.WriteConnectRequest(
+      //    this.reusableBuffer,
+      //    this.version.major,
+      //    this.version.minor,
+      //    this.version.revision);
+      //this.socket.TrySend(peer.EndPoint, this.reusableBuffer, length);
     }
 
     private void SendAcceptConnection(NetPeer peer)
     {
-      int length = NetIO.WriteConnectAccept(this.reusableBuffer);
-      this.socket.TrySend(peer.EndPoint, this.reusableBuffer, length);
+      //int length = NetIO.WriteConnectAccept(this.reusableBuffer);
+      //this.socket.TrySend(peer.EndPoint, this.reusableBuffer, length);
     }
 
     private void SendRejectConnection(
       IPEndPoint source,
       NetRejectReason rejectReason)
     {
-      int length =
-        NetIO.WriteConnectReject(this.reusableBuffer, (byte)rejectReason);
-      this.socket.TrySend(source, this.reusableBuffer, length);
+      //int length =
+      //  NetIO.WriteConnectReject(this.reusableBuffer, (byte)rejectReason);
+      //this.socket.TrySend(source, this.reusableBuffer, length);
     }
 
     private void SendPong(NetPeer peer, byte sequence)
