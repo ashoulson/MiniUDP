@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("SampleServer")]
-[assembly: AssemblyDescription("A sample server application for MiniUDP")]
+[assembly: AssemblyTitle("SampleCommon")]
+[assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Alexander Shoulson")]
-[assembly: AssemblyProduct("SampleServer")]
-[assembly: AssemblyCopyright("Copyright © Alexander Shoulson 2016")]
+[assembly: AssemblyCompany("")]
+[assembly: AssemblyProduct("SampleCommon")]
+[assembly: AssemblyCopyright("Copyright ©  2016")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("af4d6800-abaf-472d-8976-3e6569303077")]
+[assembly: Guid("85c3e882-7fa3-41b5-9e5c-72189c6f3ecb")]
 
 // Version information for an assembly consists of the following four values:
 //

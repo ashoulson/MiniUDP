@@ -28,125 +28,153 @@ namespace MiniUDP
 {
   public delegate void SocketFailed(SocketException exception);
 
-  public class NetSocket
+  internal interface INetSocketReader
   {
-    public event SocketFailed BindFailed;
-    public event SocketFailed ReceiveFailed;
-    public event SocketFailed SendFailed;
+    SocketError TryReceive(
+      out IPEndPoint source,
+      out byte[] buffer,
+      out int length);
+  }
 
-    internal static Socket CreateRawSocket()
+  internal interface INetSocketWriter
+  {
+    SocketError TrySend(
+      IPEndPoint destination,
+      byte[] buffer,
+      int length);
+  }
+
+  /// <summary>
+  /// Since raw sockets are thread safe, we use a global socket singleton
+  /// between the two threads for the sake of convenience.
+  /// </summary>
+  internal class NetSocket
+  {
+    private class Reader : INetSocketReader
     {
-      Socket socket = 
+      private readonly NetSocket socket;
+      private readonly byte[] receiveBuffer;
+
+      internal Reader(NetSocket socket)
+      {
+        this.socket = socket;
+        this.receiveBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
+      }
+
+      public SocketError TryReceive(
+        out IPEndPoint source,
+        out byte[] buffer,
+        out int length)
+      {
+        buffer = this.receiveBuffer;
+        return
+          this.socket.TryReceive(
+            out source, 
+            this.receiveBuffer, 
+            out length);
+      }
+    }
+
+    private class Writer : INetSocketWriter
+    {
+      private readonly NetSocket socket;
+
+      internal Writer(NetSocket socket)
+      {
+        this.socket = socket;
+      }
+
+      public SocketError TrySend(
+        IPEndPoint destination,
+        byte[] buffer,
+        int length)
+      {
+        return this.socket.TrySend(destination, buffer, length);
+      }
+    }
+
+    public static bool Succeeded(SocketError error)
+    {
+      return (error == SocketError.Success);
+    }
+
+    public static bool Empty(SocketError error)
+    {
+      return (error == SocketError.NoData);
+    }
+
+    // https://msdn.microsoft.com/en-us/library/system.net.sockets.socket.aspx
+    // We don't need a lock for writing, but we do for reading because polling
+    // and receiving are two different non-atomic actions. In practice we
+    // should only ever be reading from the socket on one thread anyway.
+    private object readLock;
+    private Socket rawSocket;
+
+    internal NetSocket()
+    {
+      this.readLock = new object();
+      this.rawSocket =
         new Socket(
           AddressFamily.InterNetwork,
           SocketType.Dgram,
           ProtocolType.Udp);
 
-      socket.ReceiveBufferSize = NetConst.SOCKET_BUFFER_SIZE;
-      socket.SendBufferSize = NetConst.SOCKET_BUFFER_SIZE;
-      socket.Blocking = false;
+      this.rawSocket.ReceiveBufferSize = NetConfig.SOCKET_BUFFER_SIZE;
+      this.rawSocket.SendBufferSize = NetConfig.SOCKET_BUFFER_SIZE;
+      this.rawSocket.Blocking = false;
 
       try
       {
+        // Ignore port unreachable (connection reset by remote host)
         const uint IOC_IN = 0x80000000;
         const uint IOC_VENDOR = 0x18000000;
         uint SIO_UDP_CONNRESET = IOC_IN | IOC_VENDOR | 12;
-        socket.IOControl((int)SIO_UDP_CONNRESET, new byte[] { 0 }, null);
+        this.rawSocket.IOControl(
+          (int)SIO_UDP_CONNRESET, 
+          new byte[] { 0 }, 
+          null);
       }
       catch
       {
+        // Not always supported
         NetDebug.LogWarning(
           "Failed to set control code for ignoring ICMP port unreachable.");
       }
-
-      return socket;
     }
 
-    private readonly byte[] receiveBuffer;
-    private readonly Socket socket;
-
-    internal NetSocket(Socket socket)
+    internal INetSocketReader CreateReader()
     {
-      this.receiveBuffer = new byte[NetConst.SOCKET_BUFFER_SIZE];
-      this.socket = socket;
+      return new Reader(this);
     }
 
-    /// <summary>
-    /// Starts the socket using the supplied endpoint.
-    /// </summary>
-    internal bool Bind(int port)
+    internal INetSocketWriter CreateWriter()
+    {
+      return new Writer(this);
+    }
+
+    internal SocketError Bind(int port)
     {
       try
       {
-        this.socket.Bind(new IPEndPoint(IPAddress.Any, port));
-        return true;
+        this.rawSocket.Bind(new IPEndPoint(IPAddress.Any, port));
       }
       catch (SocketException exception)
       {
-        if (exception.ErrorCode == (int)SocketError.AddressAlreadyInUse)
-          NetDebug.LogError("Port " + port + " unavailable");
-        else
-          NetDebug.LogError(exception.Message);
-        this.BindFailed?.Invoke(exception);
-        return false;
+        return exception.SocketErrorCode;
       }
+      return SocketError.Success;
     }
 
     internal void Close()
     {
-      this.socket.Close();
-    }
-
-    /// <summary> 
-    /// Attempts to read from OS socket. Returns false if the read fails
-    /// or if there is nothing to read.
-    /// </summary>
-    internal bool TryReceive(
-      out IPEndPoint source,
-      out byte[] buffer,
-      out int length)
-    {
-      source = null;
-      buffer = null;
-      length = 0;
-
-      if (this.socket.Poll(0, SelectMode.SelectRead) == false)
-        return false;
-
-      try
-      {
-        EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
-
-        length =
-          this.socket.ReceiveFrom(
-            this.receiveBuffer,
-            NetConst.SOCKET_BUFFER_SIZE,
-            SocketFlags.None,
-            ref endPoint);
-
-        if (length > 0)
-        {
-          source = endPoint as IPEndPoint;
-          buffer = this.receiveBuffer;
-          return true;
-        }
-
-        return false;
-      }
-      catch (SocketException exception)
-      {
-        NetDebug.LogError("Receive failed: " + exception.Message);
-        NetDebug.LogError(exception.StackTrace);
-        this.ReceiveFailed?.Invoke(exception);
-        return false;
-      }
+      this.rawSocket.Close();
     }
 
     /// <summary> 
     /// Attempts to send data to endpoint via OS socket. 
     /// Returns false if the send failed.
     /// </summary>
-    internal bool TrySend(
+    private SocketError TrySend(
       IPEndPoint destination,
       byte[] buffer,
       int length)
@@ -154,19 +182,65 @@ namespace MiniUDP
       try
       {
         int bytesSent =
-          this.socket.SendTo(
+          this.rawSocket.SendTo(
             buffer,
             length,
             SocketFlags.None,
             destination);
-        return (bytesSent == length);
+        if (bytesSent == length)
+          return SocketError.Success;
+        return SocketError.MessageSize;
       }
       catch (SocketException exception)
       {
         NetDebug.LogError("Send failed: " + exception.Message);
         NetDebug.LogError(exception.StackTrace);
-        this.SendFailed?.Invoke(exception);
-        return false;
+        return exception.SocketErrorCode;
+      }
+    }
+
+    /// <summary> 
+    /// Attempts to read from OS socket. Returns false if the read fails
+    /// or if there is nothing to read.
+    /// </summary>
+    private SocketError TryReceive(
+      out IPEndPoint source,
+      byte[] destBuffer,
+      out int length)
+    {
+      source = null;
+      length = 0;
+
+      lock (this.readLock)
+      {
+        if (this.rawSocket.Poll(0, SelectMode.SelectRead) == false)
+          return SocketError.NoData;
+
+        try
+        {
+          EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
+
+          length =
+            this.rawSocket.ReceiveFrom(
+              destBuffer,
+              destBuffer.Length,
+              SocketFlags.None,
+              ref endPoint);
+
+          if (length > 0)
+          {
+            source = endPoint as IPEndPoint;
+            return SocketError.Success;
+          }
+
+          return SocketError.NoData;
+        }
+        catch (SocketException exception)
+        {
+          NetDebug.LogError("Receive failed: " + exception.Message);
+          NetDebug.LogError(exception.StackTrace);
+          return exception.SocketErrorCode;
+        }
       }
     }
   }

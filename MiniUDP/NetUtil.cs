@@ -26,7 +26,7 @@ namespace MiniUDP
   public static class NetUtil
   {
     /// <summary>
-    /// Compares two bytes with wrap-around arithmetic.
+    /// Compares two bytes a - b with wrap-around arithmetic.
     /// </summary>
     internal static int ByteSeqDiff(byte a, byte b)
     {
@@ -35,7 +35,7 @@ namespace MiniUDP
     }
 
     /// <summary>
-    /// Compares two ushorts with wrap-around arithmetic.
+    /// Compares two ushorts a - b with wrap-around arithmetic.
     /// </summary>
     internal static int UShortSeqDiff(ushort a, ushort b)
     {

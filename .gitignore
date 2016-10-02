@@ -4,6 +4,8 @@ SampleClient/bin
 SampleClient/obj
 SampleServer/bin
 SampleServer/obj
+SampleCommon/bin
+SampleCommon/obj
 Tests/bin
 Tests/obj
 TestResults

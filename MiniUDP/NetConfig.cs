@@ -20,98 +20,77 @@
 
 namespace MiniUDP
 {
-  public struct NetVersion
-  {
-    internal readonly byte major;
-    internal readonly byte minor;
-    internal readonly ushort revision;
-
-    public NetVersion(byte major, byte minor, ushort revision)
-    {
-      this.major = major;
-      this.minor = minor;
-      this.revision = revision;
-    }
-
-    internal bool Equals(NetVersion other)
-    {
-      return
-        (this.major == other.major) &&
-        (this.minor == other.minor) &&
-        (this.revision == other.revision);
-    }
-  }
-
   internal enum NetPacketType : byte
   {
-    INVALID       = 0,
-    Connect       = 1,
-    Disconnect    = 2,
-    ConnectAccept = 3,
-    ConnectReject = 4,
-    Carrier       = 5,
-    UNUSED1       = 6,
-    UNUSED2       = 7,
-    // Will need to expand the header to add any more
+    INVALID = 0,
 
-    Payload       = 8, // Special representation
+    Connect,
+    Disconnect,
+    ConnectAccept,
+    ConnectReject,
+    Carrier,
+    Payload,
   }
 
-  internal enum NetRejectReason : byte
+  public enum NetRejectReason : byte
   {
     INVALID = 0,
 
     BadVersion,
     Closed,
     Full,
+    Disconnected,
   }
 
-  internal enum NetDisconnectReason : byte
+  public enum NetKickReason : byte
   {
     INVALID = 0,
 
+    User,
+    Error,
     Timeout,
     Shutdown,
-    Error,
-    User,
   }
 
   internal enum NetEventType : byte
   {
     INVALID = 0,
 
-    PeerConnected,
-    PeerTimedOut,
-    PeerDisconnected,
-    PeerSocketError,
-
-    Connected,
-    Rejected,
     Notification,
     Payload,
+
+    PeerConnected,
+    PeerClosedError,
+    PeerClosedTimeout,
+    PeerClosedShutdown,
+    PeerClosedKicked,
+
+    ConnectTimedOut,
+    ConnectAccepted,
+    ConnectRejected,
   }
 
-  public class NetConst
+  public class NetConfig
   {
+    #region Configurable
+    public static int ShortTickRate = 250;
+    public static int LongTickRate = 1000;
+    public static int SleepTime = 1;
+    #endregion
+
     #region Socket Config
     internal const int SOCKET_BUFFER_SIZE = 2048;
-    internal const int SOCKET_TTL = 255;
     #endregion
 
     #region Packet
     public const int MAX_DATA_SIZE = 1200;
     public const int MAX_NOTIFICATION_PACK = MAX_DATA_SIZE + NetEvent.HEADER_SIZE;
-    public const byte MIN_DISCONNECT_REASON = 100;
-
-    public const int MAX_VERSION_BYTES = (int)NetIO.MASK_SMALL_PARAM;
+    public const int MAX_VERSION_BYTES = (1 << (8 * sizeof(byte))) - 1;
+    public const int MAX_TOKEN_BYTES = (1 << (8 * sizeof(byte))) - 1;
     #endregion
 
     #region Timing
-    public const long CONNECTION_TIME_OUT = 15000;         // How long to wait before disconnecting a quiet peer
-    public const long CONNECTION_ATTEMPT_TIME_OUT = 10000; // How long to try to connect for
-    public const int TICK_RATE = 200;                      // How often we do tick for sending session packets
-    public const int LONG_TICK_RATE = 600;                 // After this many ms, the next tick is a long tick
-    public const int THREAD_SLEEP_TIME = 1;                // Thread sleep time during update
+    public const long CONNECTION_TIME_OUT = 15000; // How long to wait before disconnecting a quiet peer
     #endregion
 
     #region Counts
@@ -119,6 +98,10 @@ namespace MiniUDP
     public const int MAX_PACKET_READS = 50;
     #endregion
 
+    #region Misc
+    internal const byte DONT_NOTIFY_PEER = 0;
+    internal const byte DEFAULT_USER_REASON = 255;
+    #endregion
     /// <summary>
     /// The delay (in ms) before we consider a connection to be spiking after
     /// receiving no traffic (and report 100% packet loss).

@@ -1,32 +1,33 @@
 ﻿using System;
 using System.Collections.Generic;
 
-using MiniUDP;
+using SampleCommon;
 
 class Program
 {
   static void Main(string[] args)
   {
-//    Server server = new Server(44325);
-//    server.Start();
+    Connector server = new Connector("Sample1.0", true);
 
-//    while (true)
-//    {
-//      server.Update();
+    server.Host(42324);
 
-//      if (Console.KeyAvailable)
-//      {
-//        ConsoleKeyInfo key = Console.ReadKey(true);
-//        switch (key.Key)
-//        {
-//          case ConsoleKey.F1:
-//            server.Stop();
-//            return;
+    while (true)
+    {
+      server.Update();
 
-//          default:
-//            break;
-//        }
-//      }
-//    }
+      if (Console.KeyAvailable)
+      {
+        ConsoleKeyInfo key = Console.ReadKey(true);
+        switch (key.Key)
+        {
+          case ConsoleKey.F1:
+            server.Stop();
+            return;
+
+          default:
+            break;
+        }
+      }
+    }
   }
 }

@@ -47,7 +47,47 @@ namespace MiniUDP
     //}
     #endregion
 
+    #region Disconnect Reason
+    internal static int PackReason(
+      byte internalReason, 
+      byte userReason)
+    {
+      if ((NetKickReason)internalReason == NetKickReason.User)
+      {
+        if (userReason == 0)
+          NetDebug.LogError("Invalid disconnect reason (user = 0)");
+        return userReason;
+      }
+      return -internalReason;
+    }
+
+    internal static NetKickReason ReadReason(
+      int reasonPacked, 
+      out byte userReason)
+    {
+      userReason = 0;
+      if (reasonPacked == 0)
+        return NetKickReason.INVALID;
+      if (reasonPacked < 0)
+      {
+        NetKickReason reason = (NetKickReason)(-reasonPacked);
+        if (reason == NetKickReason.User)
+        {
+          NetDebug.LogError("Invalid disconnect reason (user with no data)");
+          return NetKickReason.INVALID;
+        }
+        return (NetKickReason)(-reasonPacked);
+      }
+
+      userReason = (byte)reasonPacked;
+      return NetKickReason.User;
+    }
+    #endregion
+
     void INetPoolable<NetEvent>.Reset() { this.Reset(); }
+
+    internal byte[] EncodedData { get { return this.buffer; } }
+    internal int EncodedLength { get { return this.length; } }
 
     // Buffer for encoded user data
     private readonly byte[] buffer;
@@ -64,7 +104,7 @@ namespace MiniUDP
 
     public NetEvent()
     {
-      this.buffer = new byte[NetConst.MAX_DATA_SIZE];
+      this.buffer = new byte[NetConfig.MAX_DATA_SIZE];
       this.Reset();
     }
 
@@ -81,11 +121,10 @@ namespace MiniUDP
       NetPeer peer, 
       int otherData)
     {
+      this.length = 0;
       this.EventType = type;
       this.Peer = peer;
       this.OtherData = otherData;
-
-      this.length = 0;
     }
 
     internal void Initialize(
@@ -96,15 +135,15 @@ namespace MiniUDP
       int position,
       int length)
     {
-      if (length > NetConst.MAX_DATA_SIZE)
+      if (length > NetConfig.MAX_DATA_SIZE)
         throw new OverflowException("Data too long for NetEvent");
 
+      this.length = (ushort)length;
       this.EventType = type;
       this.Peer = peer;
       this.OtherData = otherData;
 
       Array.Copy(buffer, position, this.buffer, 0, length);
-      this.length = (ushort)length;
     }
 
     //internal int Write(byte[] destBuf, int position)
