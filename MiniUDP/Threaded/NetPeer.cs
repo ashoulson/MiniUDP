@@ -296,6 +296,7 @@ namespace MiniUDP
     /// </summary>
     internal bool LogNotificationSequence(ushort sequence)
     {
+      this.AckRequested = true;
       int diff = NetUtil.UShortSeqDiff(sequence, this.NotifyAck);
       if (diff > 0)
       {

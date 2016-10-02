@@ -45,9 +45,9 @@ namespace MiniUDP
     INVALID = 0,
 
     Connect,
-    Disconnect,
     ConnectAccept,
     ConnectReject,
+    Kick,
     Carrier,
     Payload,
   }

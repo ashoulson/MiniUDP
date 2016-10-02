@@ -5,7 +5,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Diagnostics;
 using System.Threading;
-using System.Linq;
 
 namespace MiniUDP
 {
@@ -118,10 +117,9 @@ namespace MiniUDP
     private readonly Stopwatch timer;
 
     private readonly INetSocketReader reader;
-    private readonly INetSocketWriter writer;
+    private readonly NetSender sender;
     private readonly string version;
 
-    private readonly byte[] reusableBuffer;
     private readonly Queue<NetEvent> reusableQueue;
     private readonly List<NetPeer> reusableList;
 
@@ -144,10 +142,9 @@ namespace MiniUDP
       this.eventPool = new NetPool<NetEvent>();
       this.peers = new Dictionary<IPEndPoint, NetPeer>();
       this.timer = new Stopwatch();
+      this.sender = new NetSender(writer);
       this.reader = reader;
-      this.writer = writer;
 
-      this.reusableBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
       this.reusableQueue = new Queue<NetEvent>();
       this.reusableList = new List<NetPeer>();
 
@@ -282,7 +279,7 @@ namespace MiniUDP
         return;
       }
 
-      this.SendConnectionRequest(peer);
+      this.sender.SendConnect(peer, this.version);
     }
 
     /// <summary>
@@ -300,7 +297,7 @@ namespace MiniUDP
 
       if (longTick || peer.HasNotifications || peer.AckRequested)
       {
-        this.SendCarrier(peer);
+        this.sender.SendCarrier(peer);
         peer.AckRequested = false;
       }
     }
@@ -325,7 +322,7 @@ namespace MiniUDP
       NetKickReason reason)
     {
       if (peer.IsOpen)
-        this.SendDisconnect(peer, reason);
+        this.sender.SendKick(peer, reason);
       this.ClosePeerSilent(peer);
     }
 
@@ -379,7 +376,7 @@ namespace MiniUDP
                 this.HandleConnectReject(peer, buffer, length);
                 break;
 
-              case NetPacketType.Disconnect:
+              case NetPacketType.Kick:
                 this.HandleDisconnect(peer, buffer, length);
                 break;
 
@@ -422,7 +419,7 @@ namespace MiniUDP
         this.peers.Add(source, peer);
 
         // Accept the connection over the network
-        this.SendAcceptConnection(peer);
+        this.sender.SendAccept(peer);
 
         // Queue the event out to the main thread to receive the connection
         this.eventOut.Enqueue(
@@ -574,99 +571,6 @@ namespace MiniUDP
     }
     #endregion
 
-    #region Packet Send
-    /// <summary>
-    /// Sends a request to connect to a remote peer.
-    /// </summary>
-    private void SendConnectionRequest(NetPeer peer)
-    {
-      NetDebug.LogMessage("Sending connect");
-      int length = 
-        NetIO.PackConnectRequest(
-          this.reusableBuffer,
-          this.version,
-          peer.Token);
-      this.writer.TrySend(peer.EndPoint, this.reusableBuffer, length);
-    }
-
-    /// <summary>
-    /// Accepts a remote request and sends an affirmative reply.
-    /// </summary>
-    private void SendAcceptConnection(NetPeer peer)
-    {
-      NetDebug.LogMessage("Sending accept");
-      int length =
-        NetIO.PackProtocolHeader(
-          this.reusableBuffer,
-          NetPacketType.ConnectAccept,
-          0,
-          0);
-      this.writer.TrySend(peer.EndPoint, this.reusableBuffer, length);
-    }
-
-    /// <summary>
-    /// Notifies a peer that we are disconnecting. May not arrive.
-    /// </summary>
-    private void SendDisconnect(
-      NetPeer peer,
-      NetKickReason disconnectReason)
-    {
-      NetDebug.LogMessage("Sending disconnect: " + disconnectReason);
-      int length =
-        NetIO.PackProtocolHeader(
-          this.reusableBuffer,
-          NetPacketType.Disconnect,
-          (byte)disconnectReason,
-          0);
-      this.writer.TrySend(peer.EndPoint, this.reusableBuffer, length);
-    }
-
-    /// <summary>
-    /// Sends a scheduled carrier message containing ping information
-    /// and reliable messages (if any).
-    /// </summary>
-    private void SendCarrier(
-      NetPeer peer)
-    {
-      NetDebug.LogMessage("Sending carrier - Queue: " + peer.Outgoing.Count());
-
-      int headerLength =
-        NetIO.PackCarrierHeader(
-          this.reusableBuffer,
-          0,
-          0,
-          0,
-          0,
-          peer.NotifyAck,
-          peer.GetFirstSequence());
-      int packedLength = 
-        NetIO.PackNotifications(
-          this.reusableBuffer, 
-          headerLength, 
-          peer.Outgoing);
-      int length = headerLength + packedLength;
-
-      this.writer.TrySend(peer.EndPoint, this.reusableBuffer, length);
-    }
-
-    /// <summary>
-    /// Notifies a sender that we have rejected their connection request.
-    /// </summary>
-    private void SendRejectConnection(
-      IPEndPoint destination,
-      NetRejectReason rejectReason)
-    {
-      NetDebug.LogMessage("Sending reject: " + rejectReason);
-      int length =
-        NetIO.PackProtocolHeader(
-          this.reusableBuffer,
-          NetPacketType.ConnectReject,
-          (byte)rejectReason,
-          0);
-      this.writer.TrySend(destination, this.reusableBuffer, length);
-    }
-    #endregion
-
     #region Event Allocation
     private NetEvent CreateEvent(
       NetEventType type,
@@ -718,25 +622,25 @@ namespace MiniUDP
       NetPeer peer;
       if (this.peers.TryGetValue(source, out peer))
       {
-        this.SendAcceptConnection(peer);
+        this.sender.SendAccept(peer);
         return false;
       }
 
       if (this.acceptConnections == false)
       {
-        this.SendRejectConnection(source, NetRejectReason.Closed);
+        this.sender.SendReject(source, NetRejectReason.Closed);
         return false;
       }
 
       if (this.IsFull)
       {
-        this.SendRejectConnection(source, NetRejectReason.Full);
+        this.sender.SendReject(source, NetRejectReason.Full);
         return false;
       }
 
       if (this.version != version)
       {
-        this.SendRejectConnection(source, NetRejectReason.BadVersion);
+        this.sender.SendReject(source, NetRejectReason.BadVersion);
         return false;
       }
 
