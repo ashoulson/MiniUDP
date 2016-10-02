@@ -13,6 +13,64 @@ namespace MiniUDP
       return (NetPacketType)buffer[0];
     }
 
+    /// <summary>
+    /// Packs a series of notifications into the buffer.
+    /// </summary>
+    internal static int PackNotifications(
+      byte[] buffer, 
+      int position, 
+      IEnumerable<NetEvent> notifications)
+    {
+      int bytesPacked = 0;
+      int maxPack = NetConfig.MAX_NOTIFICATION_PACK;
+      foreach (NetEvent notification in notifications)
+      {
+        if ((bytesPacked + notification.PackSize) > maxPack)
+          break;
+        int packSize = notification.Pack(buffer, position);
+        bytesPacked += packSize;
+        position += packSize;
+      }
+
+      return bytesPacked;
+    }
+
+    /// <summary>
+    /// Reads a collection of notifications packed in the buffer.
+    /// </summary>
+    internal static bool ReadNotifications(
+      NetPeer peer,
+      byte[] buffer,
+      int position,
+      int length,
+      Func<NetEvent> eventFactory,
+      Queue<NetEvent> destinationQueue)
+    {
+      if ((length - position) > NetConfig.MAX_NOTIFICATION_PACK)
+      {
+        NetDebug.LogError("Bad packet length");
+        return false;
+      }
+
+      while (position < length)
+      {
+        NetEvent notification = eventFactory.Invoke();
+        notification.Initialize(NetEventType.Notification, peer, 0);
+        int bytesRead = notification.Read(buffer, position, length);
+
+        if (bytesRead < 0)
+        {
+          NetDebug.LogError("Error reading notification");
+          return false;
+        }
+
+        destinationQueue.Enqueue(notification);
+        position += bytesRead;
+      }
+
+      return true;
+    }
+
     internal static int PackConnectRequest(
       byte[] buffer, 
       string version,
@@ -24,19 +82,19 @@ namespace MiniUDP
       NetDebug.Assert((byte)versionBytes == versionBytes);
       NetDebug.Assert((byte)tokenBytes == tokenBytes);
 
-      int position =
+      int bytesPacked =
         NetIO.PackProtocolHeader(
           buffer,
           NetPacketType.Connect,
           (byte)versionBytes,
           (byte)tokenBytes);
 
-      Encoding.UTF8.GetBytes(version, 0, version.Length, buffer, position);
-      position += versionBytes;
-      Encoding.UTF8.GetBytes(token, 0, token.Length, buffer, position);
-      position += tokenBytes;
+      Encoding.UTF8.GetBytes(version, 0, version.Length, buffer, bytesPacked);
+      bytesPacked += versionBytes;
+      Encoding.UTF8.GetBytes(token, 0, token.Length, buffer, bytesPacked);
+      bytesPacked += tokenBytes;
 
-      return position;
+      return bytesPacked;
     }
 
     internal static int ReadConnectRequest(
@@ -44,7 +102,6 @@ namespace MiniUDP
       out string version,
       out string token)
     {
-      NetPacketType type;
       byte versionBytes;
       byte tokenBytes;
       int headerBytes = 
@@ -52,19 +109,20 @@ namespace MiniUDP
           buffer, 
           out versionBytes, 
           out tokenBytes);
-      int position = headerBytes;
+      int bytesRead = headerBytes;
 
       try
       {
-        version = Encoding.UTF8.GetString(buffer, position, versionBytes);
-        position += versionBytes;
-        token = Encoding.UTF8.GetString(buffer, position, tokenBytes);
-        position += versionBytes;
+        version = Encoding.UTF8.GetString(buffer, bytesRead, versionBytes);
+        bytesRead += versionBytes;
+        token = Encoding.UTF8.GetString(buffer, bytesRead, tokenBytes);
+        bytesRead += versionBytes;
 
-        return position;
+        return bytesRead;
       }
       catch (Exception)
       {
+        NetDebug.LogError("Error decoding connect request");
         version = "";
         token = "";
         return headerBytes;
@@ -124,7 +182,7 @@ namespace MiniUDP
       byte loss,
       ushort processing,
       ushort messageAck,
-      ushort messageSeq)
+      ushort firstSeq)
     {
       buffer[0] = (byte)NetPacketType.Carrier;
       buffer[1] = pingSeq;
@@ -132,7 +190,7 @@ namespace MiniUDP
       buffer[3] = loss;
       NetIO.PackU16(buffer, 4, processing);
       NetIO.PackU16(buffer, 6, messageAck);
-      NetIO.PackU16(buffer, 8, messageSeq);
+      NetIO.PackU16(buffer, 8, firstSeq);
       return 10;
     }
 
@@ -142,16 +200,16 @@ namespace MiniUDP
       out byte pongSeq,
       out byte loss,
       out ushort processing,
-      out ushort messageAck,
-      out ushort messageSeq)
+      out ushort notificationAck,
+      out ushort notificationSeq) // The sequence # of the first notification
     {
       // Already know the type
       pingSeq = buffer[1];
       pongSeq = buffer[2];
       loss = buffer[3];
       processing = NetIO.ReadU16(buffer, 4);
-      messageAck = NetIO.ReadU16(buffer, 6);
-      messageSeq = NetIO.ReadU16(buffer, 8);
+      notificationAck = NetIO.ReadU16(buffer, 6);
+      notificationSeq = NetIO.ReadU16(buffer, 8);
       return 10;
     }
 

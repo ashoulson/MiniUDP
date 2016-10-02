@@ -37,12 +37,13 @@ namespace MiniUDP
   public delegate void NetPeerClosedEvent(NetPeer peer, NetKickReason reason, byte userReason);
   public delegate void NetPeerRejectEvent(NetPeer peer, NetRejectReason reason);
 
-  public delegate void NetPayloadEvent(NetPeer peer, byte[] data, int dataLength);
+  public delegate void NetDataEvent(NetPeer peer, byte[] data, int dataLength);
 
   public class NetPeer
   {
     // Data Receipt
-    public event NetPayloadEvent PayloadReceived;
+    public event NetDataEvent PayloadReceived;
+    public event NetDataEvent NotificationReceived;
 
     // Remote peer activity
     public event NetPeerErrorEvent PeerClosedError;
@@ -91,25 +92,53 @@ namespace MiniUDP
         this.ClosedByUser = true;
         this.Disconnected();
         if (userReason != NetConfig.DONT_NOTIFY_PEER)
-          this.core.OnPeerClosed(this, userReason);
+          this.core.NotifyPeerClosed(this, userReason);
       }
     }
 
+    /// <summary>
+    /// Immediately sends an unreliable sequenced payload.
+    /// </summary>
     public SocketError SendPayload(byte[] data, int length)
     {
       if (length < 0)
         throw new ArgumentOutOfRangeException("length");
       if (length > NetConfig.MAX_DATA_SIZE)
+      {
+        NetDebug.LogError("Payload too large: " + length);
         return SocketError.MessageSize;
+      }
 
       this.payloadSeqOut++;
       return this.core.SendPayload(this, this.payloadSeqOut, data, length);
+    }
+
+    /// <summary>
+    /// Queues a reliable ordered notification for delivery.
+    /// </summary>
+    public bool QueueNotification(byte[] data, int length)
+    {
+      if (length < 0)
+        throw new ArgumentOutOfRangeException("length");
+      if (length > NetConfig.MAX_DATA_SIZE)
+      {
+        NetDebug.LogError("Notification too large: " + length);
+        return false;
+      }
+
+      this.core.QueueNotification(this, data, length);
+      return true;
     }
 
     #region Events
     internal void OnPayloadReceived(byte[] data, int dataLength)
     {
       this.PayloadReceived?.Invoke(this, data, dataLength);
+    }
+
+    internal void OnNotificationReceived(byte[] data, int dataLength)
+    {
+      this.NotificationReceived?.Invoke(this, data, dataLength);
     }
 
     internal void OnPeerClosedError(SocketError error)
@@ -153,11 +182,13 @@ namespace MiniUDP
     #region Background Thread
     // This region should only be accessed by the BACKGROUND thread
 
-    internal IEnumerable<NetEvent> OutgoingNotifications { get { return this.outgoing; } }
+    internal IEnumerable<NetEvent> Outgoing { get { return this.outgoing; } }
     internal bool HasNotifications { get { return (this.outgoing.Count > 0); } }
     internal NetPeerStatus Status { get { return this.status; } }
+
     internal long ExpireTick { get; private set; }
     internal bool AckRequested { get; set; }
+    internal ushort NotifyAck { get; private set; }
 
     private readonly Queue<NetEvent> outgoing;
     private readonly IPEndPoint endPoint;
@@ -165,8 +196,6 @@ namespace MiniUDP
     private readonly string token;
 
     private NetCore core;
-    private ushort notificationSeqIn;
-    private ushort notificationSeqOut;
     private ushort payloadSeqIn;
     private long creationTick;
 
@@ -184,14 +213,13 @@ namespace MiniUDP
 
       this.ExpireTick = creationTick + NetConfig.CONNECTION_TIME_OUT;
       this.AckRequested = false;
+      this.NotifyAck = 0;
 
       this.outgoing = new Queue<NetEvent>();
       this.endPoint = endPoint;
       this.isClient = isClient;
       this.token = token;
 
-      this.notificationSeqIn = 0;
-      this.notificationSeqOut = 0;
       this.payloadSeqIn = 0;
       this.creationTick = creationTick;
 
@@ -213,24 +241,8 @@ namespace MiniUDP
         return;
       }
 
-      data.SetSequence(this.notificationSeqIn++);
+      data.SetSequence(this.NotifyAck++);
       this.outgoing.Enqueue(data);
-    }
-
-    /// <summary>
-    /// Cleans up all notifications older than the given ack.
-    /// </summary>
-    internal void CleanNotifications(
-      ushort notificationAck,
-      Action<NetEvent> deallocate)
-    {
-      while (this.outgoing.Count > 0)
-      {
-        NetEvent front = this.outgoing.Peek();
-        if (NetUtil.UShortSeqDiff(notificationAck, front.Sequence) < 0)
-          break;
-        deallocate.Invoke(this.outgoing.Dequeue());
-      }
     }
 
     /// <summary>
@@ -249,6 +261,16 @@ namespace MiniUDP
     internal void KeepAlive(long currentTick)
     {
       this.ExpireTick = currentTick + NetConfig.CONNECTION_TIME_OUT;
+    }
+
+    /// <summary>
+    /// If we have outgoing notifications, returns the sequence of the first.
+    /// </summary>
+    internal ushort GetFirstSequence()
+    {
+      if (this.outgoing.Count > 0)
+        return this.outgoing.Peek().Sequence;
+      return 0;
     }
 
     /// <summary>
@@ -272,14 +294,31 @@ namespace MiniUDP
     /// Receives a notification and updates its ack counter. 
     /// Return true iff the notification is new.
     /// </summary>
-    private bool ReceiveNotification(NetEvent notification)
+    internal bool LogNotificationSequence(ushort sequence)
     {
-      // TODO: Check for old notifications
-      // TODO: Clean old notifications
-      // TODO: Update Ack
-      // TODO: Return true/false if new/old
+      int diff = NetUtil.UShortSeqDiff(sequence, this.NotifyAck);
+      if (diff > 0)
+      {
+        this.NotifyAck = sequence;
+        return true;
+      }
+      return false;
+    }
 
-      return true;
+    /// <summary>
+    /// Cleans up all notifications older than the given ack.
+    /// </summary>
+    internal void LogNotificationAck(
+      ushort ack,
+      Action<NetEvent> deallocate)
+    {
+      while (this.outgoing.Count > 0)
+      {
+        NetEvent front = this.outgoing.Peek();
+        if (NetUtil.UShortSeqDiff(ack, front.Sequence) < 0)
+          break;
+        deallocate.Invoke(this.outgoing.Dequeue());
+      }
     }
     #endregion
   }

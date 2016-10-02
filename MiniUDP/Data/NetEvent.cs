@@ -33,18 +33,6 @@ namespace MiniUDP
   {
     #region Header
     internal const int HEADER_SIZE = sizeof(ushort); // Byte count
-
-    //private int WriteHeader(byte[] destBuf, int position)
-    //{
-    //  NetIO.WriteUShort(destBuf, position, this.length);
-    //  return NetEvent.HEADER_SIZE;
-    //}
-
-    //private int ReadHeader(byte[] sourceBuf, int position, out ushort length)
-    //{
-    //  length = NetIO.ReadUShort(buffer, position);
-    //  return NetEvent.HEADER_SIZE;
-    //}
     #endregion
 
     #region Disconnect Reason
@@ -146,23 +134,47 @@ namespace MiniUDP
       Array.Copy(buffer, position, this.buffer, 0, length);
     }
 
-    //internal int Write(byte[] destBuf, int position)
-    //{
-    //  position += this.WriteHeader(destBuf, position);
-    //  Array.Copy(this.buffer, 0, destBuf, position, this.length);
-    //  return position + this.length;
-    //}
-
-    //internal int Read(byte[] sourceBuf, int position)
-    //{
-    //  position += this.ReadHeader(sourceBuf, position, out this.length);
-    //  Array.Copy(sourceBuf, position, this.buffer, 0, this.length);
-    //  return position + this.length;
-    //}
-
     internal void SetSequence(ushort sequence)
     {
       this.OtherData = sequence;
     }
+
+    #region Encoding
+    internal int Pack(byte[] destBuf, int position)
+    {
+      position += this.PackHeader(destBuf, position);
+      Array.Copy(this.buffer, 0, destBuf, position, this.length);
+      return this.PackSize;
+    }
+
+    internal int Read(byte[] sourceBuf, int position, int sourceLength)
+    {
+      // Not enough room to read the header
+      if ((sourceLength - position) < NetEvent.HEADER_SIZE)
+        return -1;
+
+      int headerLen = this.ReadHeader(sourceBuf, position, out this.length);
+
+      // We're trying to read past the end
+      if ((position + headerLen + this.length) > sourceLength)
+        return -1;
+
+      position += headerLen;
+      Array.Copy(sourceBuf, position, this.buffer, 0, this.length);
+      return this.PackSize;
+    }
+
+    private int PackHeader(byte[] destBuf, int position)
+    {
+      NetIO.PackU16(destBuf, position, this.length);
+      return NetEvent.HEADER_SIZE;
+    }
+
+    private int ReadHeader(byte[] sourceBuf, int position, out ushort length)
+    {
+      length = NetIO.ReadU16(sourceBuf, position);
+      return NetEvent.HEADER_SIZE;
+    }
+    #endregion
   }
 }

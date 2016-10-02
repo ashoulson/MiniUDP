@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Diagnostics;
 using System.Threading;
+using System.Linq;
 
 namespace MiniUDP
 {
@@ -31,7 +32,10 @@ namespace MiniUDP
 
   internal class NetController
   {
-    public void DeallocateEvent(NetEvent evnt)
+    /// <summary>
+    /// Deallocates a pool-spawned event.
+    /// </summary>
+    internal void RecycleEvent(NetEvent evnt)
     {
       this.eventPool.Deallocate(evnt);
     }
@@ -43,7 +47,7 @@ namespace MiniUDP
     /// Queues a notification to be sent to the given peer.
     /// Deep-copies the user data given.
     /// </summary>
-    internal void SendNotification(NetPeer target, byte[] buffer, int length)
+    internal void QueueNotification(NetPeer target, byte[] buffer, int length)
     {
       NetEvent notification =
         this.CreateEvent(
@@ -56,16 +60,18 @@ namespace MiniUDP
       this.notificationIn.Enqueue(notification);
     }
 
+    /// <summary>
+    /// Returns the first event on the background thread's outgoing queue.
+    /// </summary>
     internal bool TryReceiveEvent(out NetEvent received)
     {
       return this.eventOut.TryDequeue(out received);
     }
 
-    internal void RecycleEvent(NetEvent evnt)
-    {
-      this.eventPool.Deallocate(evnt);
-    }
-
+    /// <summary>
+    /// Queues up a request to connect to an endpoint.
+    /// Returns the peer representing this pending connection.
+    /// </summary>
     internal NetPeer BeginConnect(IPEndPoint endpoint, string token)
     {
       NetPeer peer = new NetPeer(endpoint, token, false, 0);
@@ -73,6 +79,9 @@ namespace MiniUDP
       return peer;
     }
 
+    /// <summary>
+    /// Signals the controller to begin.
+    /// </summary>
     internal void Start()
     {
       if (this.isStarted)
@@ -85,6 +94,9 @@ namespace MiniUDP
       this.Run();
     }
 
+    /// <summary>
+    /// Signals the controller to stop updating.
+    /// </summary>
     internal void Stop()
     {
       this.isRunning = false;
@@ -150,6 +162,9 @@ namespace MiniUDP
         throw new ApplicationException("Version string too long");
     }
 
+    /// <summary>
+    /// Controller's main update loop.
+    /// </summary>
     private void Run()
     {
       this.timer.Start();
@@ -172,6 +187,9 @@ namespace MiniUDP
     }
 
     #region Peer Management
+    /// <summary>
+    /// Primary update logic. Iterates through and manages all peers.
+    /// </summary>
     private void Update()
     {
       this.ReadPackets();
@@ -494,20 +512,37 @@ namespace MiniUDP
       byte pongSeq;
       byte loss;
       ushort processing;
-      ushort messageAck;
-      ushort messageSeq;
-      NetIO.ReadCarrierHeader(
-        buffer,
-        out pingSeq,
-        out pongSeq,
-        out loss,
-        out processing,
-        out messageAck,
-        out messageSeq);
+      ushort notificationAck;
+      ushort notificationSeq;
+      int headerSize = 
+        NetIO.ReadCarrierHeader(
+          buffer,
+          out pingSeq,
+          out pongSeq,
+          out loss,
+          out processing,
+          out notificationAck,
+          out notificationSeq);
+
+      this.reusableQueue.Clear();
+      bool success = 
+        NetIO.ReadNotifications(
+          peer, 
+          buffer, 
+          headerSize, 
+          length, 
+          this.AllocateNotification, 
+          this.reusableQueue);
+      if (success == false)
+        return;
 
       peer.KeepAlive(this.Time);
+      peer.LogNotificationAck(notificationAck, this.RecycleEvent);
+      foreach (NetEvent notification in this.reusableQueue)
+        if (peer.LogNotificationSequence(notificationSeq++))
+          this.eventOut.Enqueue(notification);
+
       // TODO: Traffic statistics
-      // TODO: Extract notifications
     }
 
     private void HandlePayload(
@@ -540,6 +575,9 @@ namespace MiniUDP
     #endregion
 
     #region Packet Send
+    /// <summary>
+    /// Sends a request to connect to a remote peer.
+    /// </summary>
     private void SendConnectionRequest(NetPeer peer)
     {
       NetDebug.LogMessage("Sending connect");
@@ -551,6 +589,9 @@ namespace MiniUDP
       this.writer.TrySend(peer.EndPoint, this.reusableBuffer, length);
     }
 
+    /// <summary>
+    /// Accepts a remote request and sends an affirmative reply.
+    /// </summary>
     private void SendAcceptConnection(NetPeer peer)
     {
       NetDebug.LogMessage("Sending accept");
@@ -563,6 +604,9 @@ namespace MiniUDP
       this.writer.TrySend(peer.EndPoint, this.reusableBuffer, length);
     }
 
+    /// <summary>
+    /// Notifies a peer that we are disconnecting. May not arrive.
+    /// </summary>
     private void SendDisconnect(
       NetPeer peer,
       NetKickReason disconnectReason)
@@ -577,22 +621,37 @@ namespace MiniUDP
       this.writer.TrySend(peer.EndPoint, this.reusableBuffer, length);
     }
 
+    /// <summary>
+    /// Sends a scheduled carrier message containing ping information
+    /// and reliable messages (if any).
+    /// </summary>
     private void SendCarrier(
       NetPeer peer)
     {
-      NetDebug.LogMessage("Sending carrier");
-      int length =
+      NetDebug.LogMessage("Sending carrier - Queue: " + peer.Outgoing.Count());
+
+      int headerLength =
         NetIO.PackCarrierHeader(
           this.reusableBuffer,
           0,
           0,
           0,
           0,
-          0,
-          0);
+          peer.NotifyAck,
+          peer.GetFirstSequence());
+      int packedLength = 
+        NetIO.PackNotifications(
+          this.reusableBuffer, 
+          headerLength, 
+          peer.Outgoing);
+      int length = headerLength + packedLength;
+
       this.writer.TrySend(peer.EndPoint, this.reusableBuffer, length);
     }
 
+    /// <summary>
+    /// Notifies a sender that we have rejected their connection request.
+    /// </summary>
     private void SendRejectConnection(
       IPEndPoint destination,
       NetRejectReason rejectReason)
@@ -641,7 +700,7 @@ namespace MiniUDP
       return evnt;
     }
 
-    private NetEvent AllocateEvent()
+    private NetEvent AllocateNotification()
     {
       return this.eventPool.Allocate();
     }

@@ -20,18 +20,6 @@
 
 namespace MiniUDP
 {
-  internal enum NetPacketType : byte
-  {
-    INVALID = 0,
-
-    Connect,
-    Disconnect,
-    ConnectAccept,
-    ConnectReject,
-    Carrier,
-    Payload,
-  }
-
   public enum NetRejectReason : byte
   {
     INVALID = 0,
@@ -50,6 +38,18 @@ namespace MiniUDP
     Error,
     Timeout,
     Shutdown,
+  }
+
+  internal enum NetPacketType : byte
+  {
+    INVALID = 0,
+
+    Connect,
+    Disconnect,
+    ConnectAccept,
+    ConnectReject,
+    Carrier,
+    Payload,
   }
 
   internal enum NetEventType : byte
