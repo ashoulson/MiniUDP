@@ -55,7 +55,6 @@
     <Compile Include="TestNetIO.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TestNetPeer.cs" />
-    <Compile Include="TestPackets.cs" />
     <Compile Include="TestQueue.cs" />
     <Compile Include="TestUtil.cs" />
   </ItemGroup>

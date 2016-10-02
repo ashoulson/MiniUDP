@@ -36,8 +36,6 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Client.cs" />
-    <Compile Include="Clock.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -48,6 +46,10 @@
     <ProjectReference Include="..\MiniUDP\MiniUDP.csproj">
       <Project>{2f6bdfff-cf4e-4c97-9ecb-04a4e4282660}</Project>
       <Name>MiniUDP</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\SampleCommon\SampleCommon.csproj">
+      <Project>{85c3e882-7fa3-41b5-9e5c-72189c6f3ecb}</Project>
+      <Name>SampleCommon</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
