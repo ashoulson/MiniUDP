@@ -57,12 +57,13 @@ namespace SampleCommon
 
     private void Peer_PayloadReceived(NetPeer peer, byte[] data, int dataLength)
     {
-      Console.WriteLine(peer.EndPoint + " got payload: \"" + Encoding.UTF8.GetString(data, 0, dataLength) + "\"");
+      //Console.WriteLine(peer.EndPoint + " got payload: \"" + Encoding.UTF8.GetString(data, 0, dataLength) + "\"");
     }
 
     private void Peer_NotificationReceived(NetPeer peer, byte[] data, int dataLength)
     {
       Console.WriteLine(peer.EndPoint + " got notification: \"" + Encoding.UTF8.GetString(data, 0, dataLength) + "\"");
+      Console.WriteLine(peer.Traffic.Ping + "ms " + (peer.Traffic.LocalLoss * 100.0f) + "% " + (peer.Traffic.RemoteLoss * 100.0f) + "%");
     }
 
     private void Peer_PeerClosedTimeout(NetPeer peer)

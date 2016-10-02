@@ -57,6 +57,7 @@
     <Compile Include="TestNetPeer.cs" />
     <Compile Include="TestQueue.cs" />
     <Compile Include="TestUtil.cs" />
+    <Compile Include="TestNetTraffic.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MiniUDP\MiniUDP.csproj">

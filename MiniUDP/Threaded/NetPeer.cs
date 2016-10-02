@@ -60,6 +60,7 @@ namespace MiniUDP
     public bool IsOpen { get { return this.status != NetPeerStatus.Closed; } }
     public bool IsClosed { get { return this.status == NetPeerStatus.Closed; } }
     public bool IsClient { get { return this.isClient; } }
+    public NetTraffic Traffic { get { return this.traffic; } }
     public string Token { get { return this.token; } }
 
     private volatile NetPeerStatus status;
@@ -186,17 +187,16 @@ namespace MiniUDP
     internal bool HasNotifications { get { return (this.outgoing.Count > 0); } }
     internal NetPeerStatus Status { get { return this.status; } }
 
-    internal long ExpireTick { get; private set; }
     internal bool AckRequested { get; set; }
     internal ushort NotifyAck { get; private set; }
 
+    private readonly NetTraffic traffic;
     private readonly Queue<NetEvent> outgoing;
     private readonly IPEndPoint endPoint;
     private readonly bool isClient; // True iff the *remote* peer is a client
     private readonly string token;
 
     private NetCore core;
-    private ushort payloadSeqIn;
     private long creationTick;
 
     internal NetPeer(
@@ -211,16 +211,15 @@ namespace MiniUDP
       this.ClosedByUser = false;
       this.payloadSeqOut = 0;
 
-      this.ExpireTick = creationTick + NetConfig.CONNECTION_TIME_OUT;
       this.AckRequested = false;
       this.NotifyAck = 0;
 
+      this.traffic = new NetTraffic();
       this.outgoing = new Queue<NetEvent>();
       this.endPoint = endPoint;
       this.isClient = isClient;
       this.token = token;
 
-      this.payloadSeqIn = 0;
       this.creationTick = creationTick;
 
       if (isClient) // Client peers are created after a successful connection
@@ -253,14 +252,66 @@ namespace MiniUDP
       this.status = NetPeerStatus.Connected;
     }
 
+    /// <summary>
+    /// Assigns this peer to a main-thread core for functionality.
+    /// </summary>
     internal void Expose(NetCore core)
     {
       this.core = core;
     }
 
-    internal void KeepAlive(long currentTick)
+    /// <summary>
+    /// Notifies that we have received useful data.
+    /// </summary>
+    internal void KeepAlive(long curTime)
     {
-      this.ExpireTick = currentTick + NetConfig.CONNECTION_TIME_OUT;
+      this.traffic.ReceivePacket(curTime);
+    }
+
+    /// <summary>
+    /// Returns the time (in ms) since we last received useful data.
+    /// </summary>
+    internal long GetTimeSinceRecv(long curTime)
+    {
+      return this.traffic.GetTimeSinceRecv(curTime);
+    }
+
+    /// <summary>
+    /// Advances the outgoing ping sequence.
+    /// </summary>
+    internal void AdvancePing(long curTime)
+    {
+      this.traffic.AdvancePing(curTime);
+    }
+
+    /// <summary>
+    /// Produces statistics for carrier packets.
+    /// </summary>
+    internal void ProduceStatistics(
+      long curTime,
+      out byte pingSeq,
+      out byte pongSeq,
+      out byte loss,
+      out ushort processTime)
+    {
+      this.traffic.GeneratePing(out pingSeq);
+      this.traffic.GeneratePong(curTime, out pongSeq, out processTime);
+      this.traffic.GenerateLoss(out loss);
+    }
+
+    /// <summary>
+    /// Processes statistics received from carrier packets.
+    /// </summary>
+    internal void ReceiveStatistics(
+      long curTime,
+      byte pingSeq,
+      byte pongSeq,
+      byte loss,
+      ushort processTime)
+    {
+      this.traffic.ReceivePing(curTime, pingSeq);
+      this.traffic.ReceivePong(curTime, pongSeq, processTime);
+      this.traffic.ReceiveLoss(loss);
     }
 
     /// <summary>
@@ -279,15 +330,7 @@ namespace MiniUDP
     /// </summary>
     internal bool LogPayloadSequence(ushort sequence)
     {
-      // TODO: Record sequence for PL% calculation
-
-      int diff = NetUtil.UShortSeqDiff(sequence, this.payloadSeqIn);
-      if (diff > 0)
-      {
-        this.payloadSeqIn = sequence;
-        return true;
-      }
-      return false;
+      return this.traffic.ReceivePayloadSequence(sequence);
     }
 
     /// <summary>

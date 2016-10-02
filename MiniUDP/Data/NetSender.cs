@@ -43,7 +43,6 @@ namespace MiniUDP
       NetPeer peer,
       string version)
     {
-      NetDebug.LogMessage("Sending connect");
       int length =
         NetIO.PackConnectRequest(
           this.sendBuffer,
@@ -58,7 +57,6 @@ namespace MiniUDP
     internal SocketError SendAccept(
       NetPeer peer)
     {
-      NetDebug.LogMessage("Sending accept");
       int length =
         NetIO.PackProtocolHeader(
           this.sendBuffer,
@@ -76,7 +74,6 @@ namespace MiniUDP
       NetKickReason kickReason,
       byte userReason = 0)
     {
-      NetDebug.LogMessage("Sending kick: " + kickReason);
       int length =
         NetIO.PackProtocolHeader(
           this.sendBuffer,
@@ -91,17 +88,27 @@ namespace MiniUDP
     /// and reliable messages (if any).
     /// </summary>
     internal SocketError SendCarrier(
-      NetPeer peer)
+      NetPeer peer,
+      long curTime)
     {
-      NetDebug.LogMessage("Sending carrier - Queue: " + peer.Outgoing.Count());
+      byte pingSeq;
+      byte pongSeq;
+      byte loss;
+      ushort processTime;
+      peer.ProduceStatistics(
+        curTime,
+        out pingSeq,
+        out pongSeq,
+        out loss,
+        out processTime);
 
       int headerLength =
         NetIO.PackCarrierHeader(
           this.sendBuffer,
-          0,
-          0,
-          0,
-          0,
+          pingSeq,
+          pongSeq,
+          loss,
+          processTime,
           peer.NotifyAck,
           peer.GetFirstSequence());
       int packedLength =
@@ -121,7 +128,6 @@ namespace MiniUDP
       IPEndPoint destination,
       NetRejectReason rejectReason)
     {
-      NetDebug.LogMessage("Sending reject: " + rejectReason);
       int length =
         NetIO.PackProtocolHeader(
           this.sendBuffer,

@@ -31,7 +31,7 @@ namespace MiniUDP
     internal static int ByteSeqDiff(byte a, byte b)
     {
       // Assumes a sequence is 8 bits
-      return (int)((a << 24) - (b << 24)) >> 24;
+      return ((a << 24) - (b << 24)) >> 24;
     }
 
     /// <summary>
@@ -40,7 +40,7 @@ namespace MiniUDP
     internal static int UShortSeqDiff(ushort a, ushort b)
     {
         // Assumes a stamp is 16 bits
-        return (int)((a << 16) - (b << 16)) >> 16;
+        return ((a << 16) - (b << 16)) >> 16;
     }
 
     /// <summary>
