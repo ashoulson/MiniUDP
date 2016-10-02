@@ -8,6 +8,8 @@ Based loosely on [MassiveNet](https://github.com/jakevn/MassiveNet), and [LiteNe
 
 ---
 
+[![Build status](https://ci.appveyor.com/api/projects/status/1dt5aepocun584g4/branch/master?svg=true)](https://ci.appveyor.com/project/ashoulson/miniudp/branch/master)
+
 Supported Networking Tasks:
 - UDP traffic I/O for byte[] arrays with very little overhead
 - Connection establishment and time-out detection
@@ -16,8 +18,8 @@ Supported Networking Tasks:
 
 Three delivery modes:
 - **Connection Token:** A custom string attached with an opening connection request. Will be delivered to the host when the connection is established and made available via an event. Intended for session token authorization.
-- **Payloads:** Sent immediately upon request. Unreliable sequenced -- MiniUDP will not re-send but will drop payloads on arrival if they're older than the latest. Intended for synchronizing delta-encoded game state data.
-- **Notifications:** Queued and sent at regular intervals. Reliable ordered -- MiniUDP will ensure the arrival of these messages and will re-send if necessary. Intended for extra-game messages like chat, authentication, and other bookkeeping tasks.
+- **Payloads:** Sent immediately upon request as unreliable-sequenced. MiniUDP will not re-send but will drop payloads on arrival if they're older than the latest. Intended for synchronizing delta-encoded game state data.
+- **Notifications:** Queued and sent at regular intervals as reliable-ordered. MiniUDP will ensure the arrival of these messages and will re-send if necessary. Intended for extra-game messages like chat, authentication, and other bookkeeping tasks.
 
 Wishlist:
 - Encryption and authentication
