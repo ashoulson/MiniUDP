@@ -38,6 +38,7 @@
   <ItemGroup>
     <Compile Include="Data\NetEvent.cs" />
     <Compile Include="Data\NetIO.cs" />
+    <Compile Include="Data\NetSender.cs" />
     <Compile Include="NetUtil.cs" />
     <Compile Include="NetConfig.cs" />
     <Compile Include="NetCore.cs" />

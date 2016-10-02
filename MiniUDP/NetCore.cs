@@ -33,7 +33,7 @@ namespace MiniUDP
 
     private readonly NetController controller;
     private readonly NetSocket socket;
-    private readonly INetSocketWriter writer;
+    private readonly NetSender sender;
     private readonly byte[] reusableBuffer;
     private Thread controllerThread;
 
@@ -43,7 +43,7 @@ namespace MiniUDP
         version = "";
 
       this.socket = new NetSocket();
-      this.writer = this.socket.CreateWriter();
+      this.sender = new NetSender(this.socket.CreateWriter());
       this.reusableBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
       this.controller = 
         new NetController(
@@ -172,7 +172,7 @@ namespace MiniUDP
     /// </summary>
     internal void NotifyPeerClosed(NetPeer peer, byte reason)
     {
-      this.SendUserDisconnect(peer.EndPoint, reason);
+      this.sender.SendKick(peer, NetKickReason.User, reason);
     }
 
     /// <summary>
@@ -181,27 +181,10 @@ namespace MiniUDP
     internal SocketError SendPayload(
       NetPeer peer, 
       ushort sequence, 
-      byte[] buffer, 
+      byte[] data, 
       int length)
     {
-      int position = NetIO.PackPayloadHeader(this.reusableBuffer, sequence);
-      Array.Copy(buffer, 0, this.reusableBuffer, position, length);
-      position += length;
-      return this.writer.TrySend(peer.EndPoint, this.reusableBuffer, position);
-    }
-
-    private void SendUserDisconnect(
-      IPEndPoint source,
-      byte userReason)
-    {
-      NetDebug.LogMessage("Sending disconnect " + userReason);
-      int length =
-        NetIO.PackProtocolHeader(
-          this.reusableBuffer,
-          NetPacketType.Disconnect,
-          (byte)NetKickReason.User,
-          userReason);
-      this.writer.TrySend(source, this.reusableBuffer, length);
+      return this.sender.SendPayload(peer, sequence, data, length);
     }
   }
 }
