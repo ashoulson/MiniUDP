@@ -18,547 +18,227 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
-using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 
-using CommonUtil;
-
 namespace MiniUDP
 {
-  public delegate void PeerEvent(NetPeer source);
-  public delegate void ConnectionEvent(string address);
+  public delegate void SocketFailed(SocketException exception);
 
-  public class NetSocket
+  internal interface INetSocketReader
   {
-    /// <summary>
-    /// A remote peer has connected.
-    /// </summary>
-    public event PeerEvent Connected;
+    SocketError TryReceive(
+      out IPEndPoint source,
+      out byte[] buffer,
+      out int length);
+  }
 
-    /// <summary>
-    /// A local peer has been closed and its disconnect message has been sent.
-    /// </summary>
-    public event PeerEvent Closed;
+  internal interface INetSocketWriter
+  {
+    SocketError TrySend(
+      IPEndPoint destination,
+      byte[] buffer,
+      int length);
+  }
 
-    /// <summary>
-    /// A remote peer has disconnected.
-    /// </summary>
-    public event PeerEvent Disconnected;
-
-    /// <summary>
-    /// A remote peer has timed out.
-    /// </summary>
-    public event PeerEvent TimedOut;
-
-    /// <summary>
-    /// An attempt to connect to a remote peer has timed out.
-    /// </summary>
-    public event ConnectionEvent ConnectFailed;
-
-    private class PendingConnection
+  /// <summary>
+  /// Since raw sockets are thread safe, we use a global socket singleton
+  /// between the two threads for the sake of convenience.
+  /// </summary>
+  internal class NetSocket
+  {
+    private class Reader : INetSocketReader
     {
-      internal IPEndPoint EndPoint { get { return this.endPoint; } }
+      private readonly NetSocket socket;
+      private readonly byte[] receiveBuffer;
 
-      private NetTime time;
-      private readonly IPEndPoint endPoint;
-      private double lastAttempt;
-      private long expireTime;
-
-      internal PendingConnection(NetTime time, IPEndPoint endPoint)
+      internal Reader(NetSocket socket)
       {
-        this.time = time;
-        this.endPoint = endPoint;
-        this.lastAttempt = double.NegativeInfinity;
-        this.expireTime = 
-          this.time.Time + NetConfig.CONNECTION_ATTEMPT_TIME_OUT;
+        this.socket = socket;
+        this.receiveBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
       }
 
-      internal void LogAttempt()
+      public SocketError TryReceive(
+        out IPEndPoint source,
+        out byte[] buffer,
+        out int length)
       {
-        this.lastAttempt = this.time.Time;
-      }
-
-      internal bool TimeToRetry()
-      {
-        double nextTime = this.lastAttempt + NetConfig.CONNECTION_RETRY_RATE;
-        return (nextTime < this.time.Time);
-      }
-
-      internal bool HasExpired()
-      {
-        return (this.time.Time > this.expireTime);
+        buffer = this.receiveBuffer;
+        return
+          this.socket.TryReceive(
+            out source, 
+            this.receiveBuffer, 
+            out length);
       }
     }
 
-    #region Static Methods
-    public static IPEndPoint StringToEndPoint(string address)
+    private class Writer : INetSocketWriter
     {
-      string[] split = address.Split(':');
-      string stringAddress = split[0];
-      string stringPort = split[1];
+      private readonly NetSocket socket;
 
-      int port = int.Parse(stringPort);
-      IPAddress ipaddress = IPAddress.Parse(stringAddress);
-      IPEndPoint endpoint = new IPEndPoint(ipaddress, port);
+      internal Writer(NetSocket socket)
+      {
+        this.socket = socket;
+      }
 
-      if (endpoint == null)
-        throw new ArgumentException("Failed to parse address: " + address);
-      return endpoint;
+      public SocketError TrySend(
+        IPEndPoint destination,
+        byte[] buffer,
+        int length)
+      {
+        return this.socket.TrySend(destination, buffer, length);
+      }
     }
 
-    public static IPAddress StringToAddress(string address)
+    public static bool Succeeded(SocketError error)
     {
-      string[] split = address.Split(':');
-      string stringAddress = split[0];
-      string stringPort = split[1];
-
-      int port = int.Parse(stringPort);
-      IPAddress ipaddress = IPAddress.Parse(stringAddress);
-
-      if (ipaddress == null)
-        throw new ArgumentException("Failed to parse address: " + address);
-      return ipaddress;
+      return (error == SocketError.Success);
     }
-    #endregion
 
-    #region Properties and Fields
-    public bool UseWhiteList { get; set; }
-    public int PeerCount { get { return this.peers.Count; } }
-
-    protected readonly Socket socket;
-
-    public readonly NetTime time;
-    private readonly byte[] dataBuffer;
-    private readonly UtilPool<NetPacket> packetPool;
-    private readonly Dictionary<IPEndPoint, NetPeer> peers;
-    private readonly Dictionary<IPEndPoint, PendingConnection> pendingConnections;
-    private readonly HashSet<IPAddress> whiteList;
-
-    // Pre-allocated lists for iteration tasks
-    private readonly List<NetPeer> reusablePeerList;
-    private readonly List<PendingConnection> reusableConnectionList;
-    #endregion
-
-    #region Constructors
-    public NetSocket()
+    public static bool Empty(SocketError error)
     {
-      this.time = new NetTime();
-      this.dataBuffer = new byte[NetConfig.DATA_BUFFER_SIZE];
-      this.packetPool = new UtilPool<NetPacket>();
-      this.peers = new Dictionary<IPEndPoint, NetPeer>();
-      this.pendingConnections = new Dictionary<IPEndPoint, PendingConnection>();
-      this.whiteList = new HashSet<IPAddress>();
+      return (error == SocketError.NoData);
+    }
 
-      this.reusablePeerList = new List<NetPeer>();
-      this.reusableConnectionList = new List<PendingConnection>();
+    // https://msdn.microsoft.com/en-us/library/system.net.sockets.socket.aspx
+    // We don't need a lock for writing, but we do for reading because polling
+    // and receiving are two different non-atomic actions. In practice we
+    // should only ever be reading from the socket on one thread anyway.
+    private object readLock;
+    private Socket rawSocket;
 
-      this.socket =
+    internal NetSocket()
+    {
+      this.readLock = new object();
+      this.rawSocket =
         new Socket(
           AddressFamily.InterNetwork,
           SocketType.Dgram,
           ProtocolType.Udp);
-      this.ConfigureSocket();
-    }
-    #endregion
 
-    #region Public Interface
-    /// <summary>
-    /// Adds an address to the whitelist for refusing connections.
-    /// </summary>
-    public void AddToWhiteList(string address)
-    {
-      this.whiteList.Add(NetSocket.StringToAddress(address));
-    }
-
-    /// <summary>
-    /// Starts the socket using the supplied endpoint.
-    /// If the port is taken, the given port will be incremented to a free port.
-    /// </summary>
-    public void Bind(int port)
-    {
-      try
-      {
-        this.socket.Bind(new IPEndPoint(IPAddress.Any, port));
-      }
-      catch (SocketException exception)
-      {
-        if (exception.ErrorCode == 10048)
-          UtilDebug.LogError("Port " + port + " unavailable!");
-        else
-          UtilDebug.LogError(exception.Message);
-        return;
-      }
-    }
-
-    /// <summary>
-    /// Begins the process of connecting to an address given as a string in 
-    /// "IP.IP.IP.IP:PORT" format.
-    /// </summary>
-    public void Connect(string address)
-    {
-      IPEndPoint endPoint = NetSocket.StringToEndPoint(address);
-      if (this.peers.ContainsKey(endPoint) == false)
-        this.pendingConnections.Add(
-          endPoint, 
-          new PendingConnection(this.time, endPoint));
-    }
-
-    /// <summary>
-    /// Queues up a disconnect message to a given peer.
-    /// </summary>
-    public void Disconnect(NetPeer peer)
-    {
-      peer.AddOutgoing(this.AllocatePacket(NetPacketType.Disconnect));
-    }
-
-    /// <summary>
-    /// Called at the beginning of processing. Reads all incoming data,
-    /// processes it, and assigns packets to the peers it received them from.
-    /// </summary>
-    public void Receive()
-    {
-      for (int i = 0; i < NetConfig.MAX_PACKET_READS; i++)
-      {
-        if (this.CanReceive() == false)
-          break;
-
-        IPEndPoint source;
-        NetPacket packet = this.TryReceive(out source);
-
-        if ((packet != null) && this.PreProcess(packet, source))
-        {
-          NetPeer sourcePeer;
-          if (this.peers.TryGetValue(source, out sourcePeer))
-            sourcePeer.AddReceived(packet);
-          else
-            UtilDebug.LogWarning("Message from unrecognized peer: " + source);
-        }
-      }
-    }
-
-    /// <summary>
-    /// Updates all peers, sending notifications of received messages or 
-    /// timeouts. Timeouts occur after all message notifications.
-    /// </summary>
-    public void Poll()
-    {
-      this.RetryConnections();
-
-      List<NetPeer> timedOutPeers = this.GetPeerList();
-      foreach (NetPeer peer in this.peers.Values)
-      {
-        peer.FlagMessagesReady();
-        if (peer.IsTimedOut())
-          timedOutPeers.Add(peer);
-      }
-
-      foreach (NetPeer peer in timedOutPeers)
-      {
-        peer.SilentClose();
-        this.peers.Remove(peer.EndPoint);
-        if (this.TimedOut != null)
-          this.TimedOut.Invoke(peer);
-      }
-    }
-
-    /// <summary>
-    /// Called at the end of processing, sends any packets that have been
-    /// queued up for transmission to all relevant peers.
-    /// </summary>
-    public void Transmit()
-    {
-      List<NetPeer> closedPeers = this.GetPeerList();
-      foreach (NetPeer peer in this.peers.Values)
-      {
-        while (peer.Outgoing.Count > 0)
-        {
-          NetPacket packet = peer.Outgoing.Dequeue();
-          this.TrySend(packet, peer.EndPoint);
-          UtilPool.Free(packet);
-        }
-
-        if (peer.Status == NetPeerStatus.Closed)
-          closedPeers.Add(peer);
-      }
-
-      foreach (NetPeer peer in closedPeers)
-      {
-        peer.SilentClose();
-        this.peers.Remove(peer.EndPoint);
-        if (this.Closed != null)
-          this.Closed.Invoke(peer);
-      }
-    }
-
-    /// <summary>
-    /// Queues disconnect packets for all peers (but they won't be sent
-    /// until the next Transmit() call).
-    /// </summary>
-    public void Shutdown()
-    {
-      foreach (NetPeer peer in this.peers.Values)
-        peer.Close();
-    }
-    #endregion
-
-    #region Protected Helpers
-    /// <summary>
-    /// Allocates a packet from the pool for use in transmission. Packets
-    /// will be automatically freed after send -- no need to do it manually.
-    /// </summary>
-    internal NetPacket AllocatePacket(NetPacketType packetType)
-    {
-      NetPacket packet = this.packetPool.Allocate();
-      packet.Initialize(packetType);
-      return packet;
-    }
-
-    /// <summary>
-    /// Polls each pending connection to see if it is time to retry, and
-    /// does so if applicable. Cleans up any expired connection attempts.
-    /// </summary>
-    private void RetryConnections()
-    {
-      List<PendingConnection> expired = this.GetConnectionList();
-      foreach (PendingConnection pending in this.pendingConnections.Values)
-      {
-        if (pending.TimeToRetry())
-        {
-          NetPacket packet = this.AllocatePacket(NetPacketType.Connect);
-          this.TrySend(packet, pending.EndPoint);
-          UtilPool.Free(packet);
-          pending.LogAttempt();
-        }
-        else if (pending.HasExpired())
-        {
-          expired.Add(pending);
-        }
-      }
-
-      foreach (PendingConnection pending in expired)
-      {
-        this.pendingConnections.Remove(pending.EndPoint);
-        if (this.ConnectFailed != null)
-          this.ConnectFailed.Invoke(pending.EndPoint.ToString());
-      }
-    }
-
-    /// <summary>
-    /// Pre-processes an incoming packet for protocol-level traffic before
-    /// sending anything to higher levels. Returns true if the packet
-    /// should be escalated to the application level, false if the packet
-    /// should be considered "consumed".
-    /// </summary>
-    private bool PreProcess(NetPacket packet, IPEndPoint source)
-    {
-      switch (packet.PacketType)
-      {
-        case NetPacketType.Connect:
-          this.HandleConnection(source, true);
-          return false;
-
-        case NetPacketType.Connected:
-          this.HandleConnection(source, false);
-          return false;
-
-        case NetPacketType.Disconnect:
-          this.HandleDisconnection(source);
-          return false;
-
-        case NetPacketType.Message:
-          return true;
-
-        default:
-          UtilDebug.LogWarning("Invalid packet type for server");
-          return false;
-      }
-    }
-
-    /// <summary>
-    /// Handles incoming connection-related packets by creating peers.
-    /// </summary>
-    private void HandleConnection(IPEndPoint source, bool sendResponse)
-    {
-      if (this.VerifySource(source))
-      {
-        NetPeer peer = this.RegisterPeer(source);
-
-        if (sendResponse)
-          peer.AddOutgoing(this.AllocatePacket(NetPacketType.Connected));
-
-        if (this.pendingConnections.ContainsKey(source))
-          this.pendingConnections.Remove(source);
-      }
-    }
-
-    /// <summary>
-    /// Handles incoming disconnection-related packets by removing peers.
-    /// </summary>
-    private void HandleDisconnection(IPEndPoint source)
-    {
-      NetPeer peer = null;
-      if (this.peers.TryGetValue(source, out peer))
-      {
-        peer.SilentClose();
-        this.peers.Remove(source);
-        if (this.Disconnected != null)
-          this.Disconnected.Invoke(peer);
-      }
-      else
-      {
-        UtilDebug.LogWarning("Disconnection from unknown source");
-      }
-    }
-
-    /// <summary>
-    /// Verifies that the source of a packet is on our whitelist, if we are
-    /// using one. Note that this is not very secure without encryption, but
-    /// is useful for debugging and can filter out accidents.
-    /// </summary>
-    private bool VerifySource(IPEndPoint source)
-    {
-      if (this.UseWhiteList == false)
-        return true;
-
-      if (this.whiteList.Contains(source.Address))
-        return true;
-
-      UtilDebug.LogWarning("Unrecognized connection: " + source.Address);
-      return false;
-    }
-
-    #region Peer Management
-    private NetPeer RegisterPeer(IPEndPoint source)
-    {
-      NetPeer peer = this.GetPeer(source);
-      if (peer == null)
-      {
-        // Peers aren't made frequently enough to bother pooling them
-        peer = new NetPeer(this.time, source, this);
-        this.AddPeer(peer);
-
-        if (this.Connected != null)
-          this.Connected.Invoke(peer);
-      }
-
-      return peer;
-    }
-
-    private void AddPeer(NetPeer peer)
-    {
-      this.peers.Add(peer.EndPoint, peer);
-    }
-
-    private NetPeer GetPeer(IPEndPoint endPoint)
-    {
-      NetPeer peer = null;
-      if (this.peers.TryGetValue(endPoint, out peer))
-        return peer;
-      return null;
-    }
-    #endregion
-
-    /// <summary> 
-    /// Returns true if OS socket has data available for read. 
-    /// </summary>
-    private bool CanReceive()
-    {
-      return this.socket.Poll(0, SelectMode.SelectRead);
-    }
-
-    /// <summary> 
-    /// Attempts to read from OS socket. Returns false if the read fails
-    /// or if there is nothing to read.
-    /// </summary>
-    private NetPacket TryReceive(out IPEndPoint source)
-    {
-      source = null;
+      this.rawSocket.ReceiveBufferSize = NetConfig.SOCKET_BUFFER_SIZE;
+      this.rawSocket.SendBufferSize = NetConfig.SOCKET_BUFFER_SIZE;
+      this.rawSocket.Blocking = false;
 
       try
       {
-        EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
-        int receivedBytes =
-          this.socket.ReceiveFrom(
-            this.dataBuffer,
-            this.dataBuffer.Length,
-            SocketFlags.None,
-            ref endPoint);
-
-        if (receivedBytes > 0)
-        {
-          source = endPoint as IPEndPoint;
-          NetPacket packet = this.packetPool.Allocate();
-          if (packet.NetInput(this.dataBuffer, receivedBytes))
-            return packet;
-        }
-
-        return null;
+        // Ignore port unreachable (connection reset by remote host)
+        const uint IOC_IN = 0x80000000;
+        const uint IOC_VENDOR = 0x18000000;
+        uint SIO_UDP_CONNRESET = IOC_IN | IOC_VENDOR | 12;
+        this.rawSocket.IOControl(
+          (int)SIO_UDP_CONNRESET, 
+          new byte[] { 0 }, 
+          null);
       }
       catch
       {
-        return null;
+        // Not always supported
+        NetDebug.LogWarning(
+          "Failed to set control code for ignoring ICMP port unreachable.");
       }
+    }
+
+    internal INetSocketReader CreateReader()
+    {
+      return new Reader(this);
+    }
+
+    internal INetSocketWriter CreateWriter()
+    {
+      return new Writer(this);
+    }
+
+    internal SocketError Bind(int port)
+    {
+      try
+      {
+        this.rawSocket.Bind(new IPEndPoint(IPAddress.Any, port));
+      }
+      catch (SocketException exception)
+      {
+        return exception.SocketErrorCode;
+      }
+      return SocketError.Success;
+    }
+
+    internal void Close()
+    {
+      this.rawSocket.Close();
     }
 
     /// <summary> 
     /// Attempts to send data to endpoint via OS socket. 
     /// Returns false if the send failed.
     /// </summary>
-    private bool TrySend(
-      NetPacket packet,
-      IPEndPoint destination)
+    private SocketError TrySend(
+      IPEndPoint destination,
+      byte[] buffer,
+      int length)
     {
       try
       {
-        int bytesToSend = packet.NetOutput(this.dataBuffer);
         int bytesSent =
-          this.socket.SendTo(
-            this.dataBuffer,
-            bytesToSend,
+          this.rawSocket.SendTo(
+            buffer,
+            length,
             SocketFlags.None,
             destination);
-
-        return (bytesSent == bytesToSend);
+        if (bytesSent == length)
+          return SocketError.Success;
+        return SocketError.MessageSize;
       }
-      catch
+      catch (SocketException exception)
       {
-        return false;
+        NetDebug.LogError("Send failed: " + exception.Message);
+        NetDebug.LogError(exception.StackTrace);
+        return exception.SocketErrorCode;
       }
     }
 
-    private void ConfigureSocket()
+    /// <summary> 
+    /// Attempts to read from OS socket. Returns false if the read fails
+    /// or if there is nothing to read.
+    /// </summary>
+    private SocketError TryReceive(
+      out IPEndPoint source,
+      byte[] destBuffer,
+      out int length)
     {
-      this.socket.ReceiveBufferSize = NetConfig.DATA_BUFFER_SIZE;
-      this.socket.SendBufferSize = NetConfig.DATA_BUFFER_SIZE;
-      this.socket.Blocking = false;
+      source = null;
+      length = 0;
 
-      try
+      lock (this.readLock)
       {
-        const uint IOC_IN = 0x80000000;
-        const uint IOC_VENDOR = 0x18000000;
-        uint SIO_UDP_CONNRESET = IOC_IN | IOC_VENDOR | 12;
-        this.socket.IOControl((int)SIO_UDP_CONNRESET, new byte[] { 0 }, null);
-      }
-      catch
-      {
-        UtilDebug.LogWarning(
-          "Failed to set control code for ignoring ICMP port unreachable.");
-      }
-    }
+        if (this.rawSocket.Poll(0, SelectMode.SelectRead) == false)
+          return SocketError.NoData;
 
-    private List<NetPeer> GetPeerList()
-    {
-      this.reusablePeerList.Clear();
-      return this.reusablePeerList;
-    }
+        try
+        {
+          EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
 
-    private List<PendingConnection> GetConnectionList()
-    {
-      this.reusableConnectionList.Clear();
-      return this.reusableConnectionList;
+          length =
+            this.rawSocket.ReceiveFrom(
+              destBuffer,
+              destBuffer.Length,
+              SocketFlags.None,
+              ref endPoint);
+
+          if (length > 0)
+          {
+            source = endPoint as IPEndPoint;
+            return SocketError.Success;
+          }
+
+          return SocketError.NoData;
+        }
+        catch (SocketException exception)
+        {
+          NetDebug.LogError("Receive failed: " + exception.Message);
+          NetDebug.LogError(exception.StackTrace);
+          return exception.SocketErrorCode;
+        }
+      }
     }
-    #endregion
   }
 }

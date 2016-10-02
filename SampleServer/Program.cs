@@ -1,24 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 
-using MiniUDP;
+using SampleCommon;
 
 class Program
 {
-  enum FooEnum : byte
-  {
-    Invalid = 0x00,
-
-    Connect = 0x10, // Fresh connection, requires acknowledgement
-    Connected = 0x20, // Acknowledgement of receipt of a connection
-    Disconnect = 0x30, // Disconnected message, may or may not arrive
-    Message = 0x40, // General packet payload holding data
-  }
-
   static void Main(string[] args)
   {
-    Server server = new Server(44325);
-    server.Start();
+    Connector server = new Connector("Sample1.0", true);
+
+    server.Host(42324);
 
     while (true)
     {

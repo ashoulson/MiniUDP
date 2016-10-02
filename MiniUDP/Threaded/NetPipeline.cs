@@ -1,5 +1,5 @@
 ﻿/*
- *  Common Utilities for Working with C# and Unity
+ *  MiniUDP - A Simple UDP Layer for Shipping and Receiving Byte Arrays
  *  Copyright (c) 2016 - Alexander Shoulson - http://ashoulson.com
  *
  *  This software is provided 'as-is', without any express or implied
@@ -18,49 +18,44 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
-using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.Threading;
 
-#if UNITY
-using UnityEngine;
-#endif
-
-namespace CommonUtil
+namespace MiniUDP
 {
-  public static class UtilDebug
+  internal class NetPipeline<T>
   {
-    [Conditional("DEBUG")]
-    public static void LogMessage(object message)
+    private Queue<T> queue;
+    private volatile int count;
+
+    public NetPipeline()
     {
-      UtilLogger.LogMessage(message);
+      this.queue = new Queue<T>();
+      this.count = 0;
     }
 
-    [Conditional("DEBUG")]
-    public static void LogWarning(object message)
+    public bool TryDequeue(out T obj)
     {
-      UtilLogger.LogWarning(message);
+      // This check can be done out of lock...
+      obj = default(T);
+      if (this.count <= 0)
+        return false;
+
+      lock (this.queue)
+      {
+        obj = this.queue.Dequeue();
+        Interlocked.Decrement(ref this.count);
+        return true;
+      }
     }
 
-    [Conditional("DEBUG")]
-    public static void LogError(object message)
+    public void Enqueue(T obj)
     {
-      UtilLogger.LogError(message);
-    }
+      lock (this.queue)
+        this.queue.Enqueue(obj);
 
-    [Conditional("DEBUG")]
-    public static void Assert(bool condition)
-    {
-      if (condition == false)
-        UtilLogger.LogWarning("Assert Failed!");
-    }
-
-    [Conditional("DEBUG")]
-    public static void Assert(bool condition, object message)
-    {
-      if (condition == false)
-        UtilLogger.LogWarning("Assert Failed: " + message);
+      // ...as long as this ++ is atomic and happens after we add
+      Interlocked.Increment(ref this.count);
     }
   }
 }

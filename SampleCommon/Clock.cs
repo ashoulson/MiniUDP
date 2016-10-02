@@ -21,46 +21,49 @@
 using System;
 using System.Diagnostics;
 
-internal class Clock
+namespace SampleCommon
 {
-  private static readonly long start = Stopwatch.GetTimestamp();
-  private static readonly double frequency =
-    1.0 / (double)Stopwatch.Frequency;
-
-  /// <summary>
-  /// Time represented as elapsed seconds.
-  /// </summary>
-  public static double Time
+  public class Clock
   {
-    get
+    private static readonly long start = Stopwatch.GetTimestamp();
+    private static readonly double frequency =
+      1.0 / (double)Stopwatch.Frequency;
+
+    /// <summary>
+    /// Time represented as elapsed seconds.
+    /// </summary>
+    public static double Time
     {
-      long diff = Stopwatch.GetTimestamp() - start;
-      return (double)diff * frequency;
+      get
+      {
+        long diff = Stopwatch.GetTimestamp() - start;
+        return (double)diff * frequency;
+      }
     }
-  }
 
-  public event Action OnFixedUpdate;
+    public event Action OnFixedUpdate;
 
-  private double updateFrequency;
-  private double lastUpdate;
+    private double updateFrequency;
+    private double lastUpdate;
 
-  public Clock(double updateFrequency)
-  {
-    this.updateFrequency = updateFrequency;
-  }
-
-  public void Start()
-  {
-    this.lastUpdate = Clock.Time;
-  }
-
-  public void Tick()
-  {
-    while ((this.lastUpdate + this.updateFrequency) < Clock.Time)
+    public Clock(double updateFrequency)
     {
-      if (this.OnFixedUpdate != null)
-        this.OnFixedUpdate.Invoke();
-      this.lastUpdate += this.updateFrequency;
+      this.updateFrequency = updateFrequency;
+    }
+
+    public void Start()
+    {
+      this.lastUpdate = Clock.Time;
+    }
+
+    public void Tick()
+    {
+      while ((this.lastUpdate + this.updateFrequency) < Clock.Time)
+      {
+        if (this.OnFixedUpdate != null)
+          this.OnFixedUpdate.Invoke();
+        this.lastUpdate += this.updateFrequency;
+      }
     }
   }
 }

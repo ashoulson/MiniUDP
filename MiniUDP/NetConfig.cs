@@ -18,66 +18,100 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
-using System;
-using System.Collections.Generic;
-
 namespace MiniUDP
 {
+  public enum NetRejectReason : byte
+  {
+    INVALID = 0,
+
+    BadVersion,
+    Closed,
+    Full,
+    Disconnected,
+  }
+
+  public enum NetKickReason : byte
+  {
+    INVALID = 0,
+
+    User,
+    Error,
+    Timeout,
+    Shutdown,
+  }
+
+  internal enum NetPacketType : byte
+  {
+    INVALID = 0,
+
+    Connect,
+    ConnectAccept,
+    ConnectReject,
+    Kick,
+    Ping,
+    Pong,
+
+    Carrier,
+    Payload,
+  }
+
+  internal enum NetEventType : byte
+  {
+    INVALID = 0,
+
+    Notification,
+    Payload,
+
+    PeerConnected,
+    PeerClosedError,
+    PeerClosedTimeout,
+    PeerClosedShutdown,
+    PeerClosedKicked,
+
+    ConnectTimedOut,
+    ConnectAccepted,
+    ConnectRejected,
+  }
+
   public class NetConfig
   {
+    #region Configurable
+    public static int ShortTickRate = 250;
+    public static int LongTickRate = 1000;
+    public static int SleepTime = 1;
+    #endregion
+
+    #region Socket Config
+    internal const int SOCKET_BUFFER_SIZE = 2048;
+    #endregion
+
+    #region Packet
+    public const int MAX_DATA_SIZE = 1200;
+    public const int MAX_NOTIFICATION_PACK = MAX_DATA_SIZE + NetEvent.HEADER_SIZE;
+    public const int MAX_VERSION_BYTES = (1 << (8 * sizeof(byte))) - 1;
+    public const int MAX_TOKEN_BYTES = (1 << (8 * sizeof(byte))) - 1;
+    #endregion
+
+    #region Timing
     /// <summary>
-    /// Maximum packets we will read during a poll.
+    /// How long to wait before disconnecting a quiet peer.
     /// </summary>
-    public const int MAX_PACKET_READS = 500;
+    public const long CONNECTION_TIME_OUT = 15000;
 
     /// <summary>
-    /// Maximum packets we will read from a given peer.
+    /// Size of the window used for smoothing ping averages.
     /// </summary>
-    public const int MAX_PACKETS_PER_PEER = 20;
+    public const int PING_SMOOTHING_WINDOW = 5;
+    #endregion
 
-    /// <summary>
-    /// Rate at which to resend a "Connecting" message when attempting to
-    /// establish a connection with a peer.
-    /// </summary>
-    public const double CONNECTION_RETRY_RATE = 0.5;
+    #region Counts
+    public const int MAX_PENDING_NOTIFICATIONS = 100;
+    public const int MAX_PACKET_READS = 50;
+    #endregion
 
-    /// <summary>
-    /// Timeout delay (in ms) for connections with peers.
-    /// </summary>
-    public const double CONNECTION_TIME_OUT = 10000;
-
-    /// <summary>
-    /// Timeout delay (in ms) attempting to establish a connection with a peer.
-    /// </summary>
-    public const long CONNECTION_ATTEMPT_TIME_OUT = 10000;
-
-    /// <summary>
-    /// The maximum message size that a packet can contain, based on known
-    /// MTUs for internet traffic. Don't change this without a good reason.
-    /// </summary>
-    public const int MAX_PAYLOAD_SIZE = 1264;
-
-    /// <summary>
-    /// Data buffer size used for packet I/O. 
-    /// Don't change this without a good reason.
-    /// </summary>
-    internal const int DATA_BUFFER_SIZE = 2048;
-
-    /// <summary>
-    /// The delay (in ms) before we consider a connection to be spiking after
-    /// receiving no traffic (and report 100% packet loss).
-    /// </summary>
-    internal const long SPIKE_TIME = 2000;
-
-    /// <summary>
-    /// Window size used when computing traffic statistic averages
-    /// </summary>
-    internal const int TRAFFIC_WINDOW_LENGTH = 20;
-
-    /// <summary>
-    /// Number of packets for which to keep a ping history. Should be roughly
-    /// equal to your send rate times the spike seconds, with some tolerance.
-    /// </summary>
-    internal const int PING_HISTORY_LENGTH = 100;
+    #region Misc
+    internal const byte DONT_NOTIFY_PEER = 0;
+    internal const byte DEFAULT_USER_REASON = 255;
+    #endregion
   }
 }
