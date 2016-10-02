@@ -90,7 +90,7 @@ namespace MiniUDP
     #endregion
 
     #region Timing
-    public const long CONNECTION_TIME_OUT = 15000; // How long to wait before disconnecting a quiet peer
+    public const long CONNECTION_TIME_OUT = 20000; // How long to wait before disconnecting a quiet peer
     #endregion
 
     #region Counts

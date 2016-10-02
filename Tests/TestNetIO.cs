@@ -246,7 +246,7 @@ namespace Tests
       byte pingSeqRead;
       byte pongSeqRead;
       byte lossRead;
-      ushort processingRead;
+      ushort processTimeRead;
       ushort notificationAckRead;
       ushort notificationSeqRead;
       int bytesRead =
@@ -255,7 +255,7 @@ namespace Tests
           out pingSeqRead,
           out pongSeqRead,
           out lossRead,
-          out processingRead,
+          out processTimeRead,
           out notificationAckRead,
           out notificationSeqRead);
 
@@ -265,7 +265,7 @@ namespace Tests
       Assert.AreEqual(pingSeq, pingSeqRead);
       Assert.AreEqual(pongSeq, pongSeqRead);
       Assert.AreEqual(loss, lossRead);
-      Assert.AreEqual(processing, processingRead);
+      Assert.AreEqual(processing, processTimeRead);
       Assert.AreEqual(messageAck, notificationAckRead);
       Assert.AreEqual(messageSeq, notificationSeqRead);
     }

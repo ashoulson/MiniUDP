@@ -291,7 +291,7 @@ namespace MiniUDP
     /// </summary>
     private void UpdateConnecting(NetPeer peer)
     {
-      if (peer.ExpireTick < this.Time)
+      if (peer.GetTimeSinceRecv(this.Time) > NetConfig.CONNECTION_TIME_OUT)
       {
         this.ClosePeer(peer, NetKickReason.Timeout);
         this.eventOut.Enqueue(
@@ -307,7 +307,7 @@ namespace MiniUDP
     /// </summary>
     private void UpdateConnected(NetPeer peer, bool longTick)
     {
-      if (peer.ExpireTick < this.Time)
+      if (peer.GetTimeSinceRecv(this.Time) > NetConfig.CONNECTION_TIME_OUT)
       {
         this.ClosePeer(peer, NetKickReason.Timeout);
         this.eventOut.Enqueue(
@@ -315,9 +315,12 @@ namespace MiniUDP
         return;
       }
 
+      long time = this.Time;
       if (longTick || peer.HasNotifications || peer.AckRequested)
       {
-        this.sender.SendCarrier(peer);
+        if (longTick)
+          peer.AdvancePing(time);
+        this.sender.SendCarrier(peer, time);
         peer.AckRequested = false;
       }
     }
@@ -397,7 +400,7 @@ namespace MiniUDP
                 break;
 
               case NetPacketType.Kick:
-                this.HandleDisconnect(peer, buffer, length);
+                this.HandleKick(peer, buffer, length);
                 break;
 
               case NetPacketType.Carrier:
@@ -423,8 +426,6 @@ namespace MiniUDP
       byte[] buffer, 
       int length)
     {
-      NetDebug.LogMessage("Got connect");
-
       string version;
       string token;
       NetIO.ReadConnectRequest(
@@ -452,7 +453,6 @@ namespace MiniUDP
       byte[] buffer,
       int length)
     {
-      NetDebug.LogMessage("Got accept");
       NetDebug.Assert(peer.IsClient == false, "Ignoring accept from client");
       if (peer.IsConnected || peer.IsClient)
         return;
@@ -469,7 +469,6 @@ namespace MiniUDP
       byte[] buffer,
       int length)
     {
-      NetDebug.LogMessage("Got reject");
       NetDebug.Assert(peer.IsClient == false, "Ignoring reject from client");
       if (peer.IsConnected || peer.IsClient)
         return;
@@ -484,12 +483,11 @@ namespace MiniUDP
         this.CreateEvent(NetEventType.ConnectRejected, peer, reason));
     }
 
-    private void HandleDisconnect(
+    private void HandleKick(
       NetPeer peer,
       byte[] buffer,
       int length)
     {
-      NetDebug.LogMessage("Got disconnect");
       if (peer.IsClosed)
         return;
 
@@ -521,14 +519,13 @@ namespace MiniUDP
       byte[] buffer,
       int length)
     {
-      NetDebug.LogMessage("Got carrier");
       if (peer.IsConnected == false)
         return;
 
       byte pingSeq;
       byte pongSeq;
       byte loss;
-      ushort processing;
+      ushort processTime;
       ushort notificationAck;
       ushort notificationSeq;
       int headerSize = 
@@ -537,7 +534,7 @@ namespace MiniUDP
           out pingSeq,
           out pongSeq,
           out loss,
-          out processing,
+          out processTime,
           out notificationAck,
           out notificationSeq);
 
@@ -555,11 +552,10 @@ namespace MiniUDP
 
       peer.KeepAlive(this.Time);
       peer.LogNotificationAck(notificationAck, this.RecycleEvent);
+      peer.ReceiveStatistics(this.Time, pingSeq, pongSeq, loss, processTime);
       foreach (NetEvent notification in this.reusableQueue)
         if (peer.LogNotificationSequence(notificationSeq++))
           this.eventOut.Enqueue(notification);
-
-      // TODO: Traffic statistics
     }
 
     private void HandlePayload(
@@ -567,7 +563,6 @@ namespace MiniUDP
       byte[] buffer,
       int length)
     {
-      NetDebug.LogMessage("Got payload");
       if (peer.IsConnected == false)
         return;
 

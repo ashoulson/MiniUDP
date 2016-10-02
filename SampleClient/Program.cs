@@ -8,19 +8,24 @@ using SampleCommon;
 class Program
 {
   private static NetPeer peer;
-  private static int count = 0;
+  private static int payloadCount = 0;
+  private static int notificationCount = 0;
 
   static void Main(string[] args)
   {
     Connector client = new Connector("Sample1.0", false);
 
-    Clock clock = new Clock(2.0f);
-    clock.OnFixedUpdate += Clock_OnFixedUpdate;
+    Clock fastClock = new Clock(0.02f);
+    Clock slowClock = new Clock(1.0f);
+    fastClock.OnFixedUpdate += SendPayload;
+    slowClock.OnFixedUpdate += SendNotification;
+
     Program.peer = client.Connect("127.0.0.1:42324");
 
     while (true)
     {
-      clock.Tick();
+      fastClock.Tick();
+      slowClock.Tick();
       client.Update();
 
       if (Console.KeyAvailable)
@@ -39,13 +44,17 @@ class Program
     }
   }
 
-  private static void Clock_OnFixedUpdate()
+  private static void SendNotification()
   {
-    byte[] data;
-    data = Encoding.UTF8.GetBytes("Payload " + count);
-    Program.peer.SendPayload(data, data.Length);
-    data = Encoding.UTF8.GetBytes("Notification " + count);
+    byte[] data = Encoding.UTF8.GetBytes("Notification " + notificationCount);
     Program.peer.QueueNotification(data, data.Length);
-    count++;
+    notificationCount++;
+  }
+
+  private static void SendPayload()
+  {
+    byte[] data = Encoding.UTF8.GetBytes("Payload " + payloadCount);
+    Program.peer.SendPayload(data, data.Length);
+    payloadCount++;
   }
 }

@@ -217,7 +217,7 @@ namespace MiniUDP
       out byte pingSeq,
       out byte pongSeq,
       out byte loss,
-      out ushort processing,
+      out ushort processTime,
       out ushort notificationAck,
       out ushort notificationSeq) // The sequence # of the first notification
     {
@@ -225,7 +225,7 @@ namespace MiniUDP
       pingSeq = buffer[1];
       pongSeq = buffer[2];
       loss = buffer[3];
-      processing = NetIO.ReadU16(buffer, 4);
+      processTime = NetIO.ReadU16(buffer, 4);
       notificationAck = NetIO.ReadU16(buffer, 6);
       notificationSeq = NetIO.ReadU16(buffer, 8);
       return 10;
