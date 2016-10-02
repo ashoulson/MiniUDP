@@ -47,8 +47,7 @@ namespace Tests
       Assert.AreEqual(-1, createTime);
 
       // Create and consume ping after 100ms
-      counter.CreatePing(100);
-      pingSeq = counter.CurrentPingSeq;
+      pingSeq = counter.CreatePing(100);
       createTime = counter.ConsumePong(pingSeq);
       Assert.AreEqual(100, createTime);
 
@@ -57,9 +56,7 @@ namespace Tests
       Assert.AreEqual(-1, createTime);
 
       // Bad data safety
-      createTime = counter.ConsumePong(-1);
-      Assert.AreEqual(-1, createTime);
-      createTime = counter.ConsumePong(1243);
+      createTime = counter.ConsumePong(243);
       Assert.AreEqual(-1, createTime);
       createTime = counter.ConsumePong(20);
       Assert.AreEqual(-1, createTime);

@@ -48,6 +48,9 @@ namespace MiniUDP
     ConnectAccept,
     ConnectReject,
     Kick,
+    Ping,
+    Pong,
+
     Carrier,
     Payload,
   }
@@ -90,7 +93,15 @@ namespace MiniUDP
     #endregion
 
     #region Timing
-    public const long CONNECTION_TIME_OUT = 20000; // How long to wait before disconnecting a quiet peer
+    /// <summary>
+    /// How long to wait before disconnecting a quiet peer.
+    /// </summary>
+    public const long CONNECTION_TIME_OUT = 15000;
+
+    /// <summary>
+    /// Size of the window used for smoothing ping averages.
+    /// </summary>
+    public const int PING_SMOOTHING_WINDOW = 5;
     #endregion
 
     #region Counts
@@ -102,21 +113,5 @@ namespace MiniUDP
     internal const byte DONT_NOTIFY_PEER = 0;
     internal const byte DEFAULT_USER_REASON = 255;
     #endregion
-    /// <summary>
-    /// The delay (in ms) before we consider a connection to be spiking after
-    /// receiving no traffic (and report 100% packet loss).
-    /// </summary>
-    internal const long SPIKE_TIME = 2000;
-
-    /// <summary>
-    /// Window size used when computing traffic statistic averages
-    /// </summary>
-    internal const int TRAFFIC_WINDOW_LENGTH = 20;
-
-    /// <summary>
-    /// Number of packets for which to keep a ping history. Should be roughly
-    /// equal to your send rate times the spike seconds, with some tolerance.
-    /// </summary>
-    internal const int PING_HISTORY_LENGTH = 100;
   }
 }
