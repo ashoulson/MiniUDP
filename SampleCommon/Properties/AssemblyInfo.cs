@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("MiniUDP")]
-[assembly: AssemblyDescription("A Simple UDP Layer for Shipping and Receiving Byte Arrays")]
+[assembly: AssemblyTitle("SampleCommon")]
+[assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Alexander Shoulson")]
-[assembly: AssemblyProduct("MiniUDP")]
-[assembly: AssemblyCopyright("Copyright © Alexander Shoulson 2016")]
+[assembly: AssemblyCompany("")]
+[assembly: AssemblyProduct("SampleCommon")]
+[assembly: AssemblyCopyright("Copyright ©  2016")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -19,12 +19,8 @@ using System.Runtime.InteropServices;
 // COM, set the ComVisible attribute to true on that type.
 [assembly: ComVisible(false)]
 
-#if DEBUG
-[assembly: InternalsVisibleTo("Tests")]
-#endif
-
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("e978a9ee-3fae-40f9-a785-e65cfc7c41ec")]
+[assembly: Guid("85c3e882-7fa3-41b5-9e5c-72189c6f3ecb")]
 
 // Version information for an assembly consists of the following four values:
 //
@@ -36,5 +32,5 @@ using System.Runtime.InteropServices;
 // You can specify all the values or you can default the Build and Revision Numbers 
 // by using the '*' as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("0.0.8.0")]
-[assembly: AssemblyFileVersion("0.0.8.0")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]

@@ -1,35 +1,12 @@
-[Ll]ibrary/
-[Tt]emp/
-[Oo]bj/
-[Bb]uild/
-
-# Auto-generated VS/MD solution and project files
-*.unityproj
-*.suo
-*.tmp
-*.user
-*.userprefs
-*.pidb
-*.booproj
-*.suo
-
-# Unity3D generated meta files
-*.pidb.meta
-
-# Unity3D generated file on crash reports
-sysinfo.txt
-
-# UnityVS files
-Unity/Assets/UnityVS.meta
-Unity/Assets/UnityVS/*
-Unity/UnityVS.*
-
-# Build Files
-MiniUDP/bin/*
-MiniUDP/obj/*
-SampleClient/bin/*
-SampleClient/obj/*
-SampleServer/bin/*
-SampleServer/obj/*
-
-
+MiniUDP/bin
+MiniUDP/obj
+SampleClient/bin
+SampleClient/obj
+SampleServer/bin
+SampleServer/obj
+SampleCommon/bin
+SampleCommon/obj
+Tests/bin
+Tests/obj
+TestResults
+.vs/

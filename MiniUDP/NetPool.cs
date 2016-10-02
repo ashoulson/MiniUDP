@@ -1,6 +1,6 @@
 ﻿/*
  *  MiniUDP - A Simple UDP Layer for Shipping and Receiving Byte Arrays
- *  Copyright (c) 2015-2016 - Alexander Shoulson - http://ashoulson.com
+ *  Copyright (c) 2016 - Alexander Shoulson - http://ashoulson.com
  *
  *  This software is provided 'as-is', without any express or implied
  *  warranty. In no event will the authors be held liable for any damages
@@ -18,49 +18,48 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
-using System;
-using System.Diagnostics;
+using System.Collections.Generic;
 
-internal class Clock
+namespace MiniUDP
 {
-  private static readonly long start = Stopwatch.GetTimestamp();
-  private static readonly double frequency =
-    1.0 / (double)Stopwatch.Frequency;
-
-  /// <summary>
-  /// Time represented as elapsed seconds.
-  /// </summary>
-  public static double Time
+  internal interface INetPoolable<T>
+    where T : INetPoolable<T>
   {
-    get
+    void Reset();
+  }
+
+  internal interface INetPool<T>
+  {
+    T Allocate();
+    void Deallocate(T obj);
+  }
+
+  internal class NetPool<T> : INetPool<T>
+    where T : INetPoolable<T>, new()
+  {
+    private readonly Stack<T> freeList;
+
+    public NetPool()
     {
-      long diff = Stopwatch.GetTimestamp() - start;
-      return (double)diff * frequency;
+      this.freeList = new Stack<T>();
     }
-  }
 
-  public event Action OnFixedUpdate;
-
-  private double updateFrequency;
-  private double lastUpdate;
-
-  public Clock(double updateFrequency)
-  {
-    this.updateFrequency = updateFrequency;
-  }
-
-  public void Start()
-  {
-    this.lastUpdate = Clock.Time;
-  }
-
-  public void Tick()
-  {
-    while ((this.lastUpdate + this.updateFrequency) < Clock.Time)
+    public T Allocate()
     {
-      if (this.OnFixedUpdate != null)
-        this.OnFixedUpdate.Invoke();
-      this.lastUpdate += this.updateFrequency;
+      lock(this.freeList)
+        if (this.freeList.Count > 0)
+          return this.freeList.Pop();
+
+      T obj = new T();
+      obj.Reset();
+      return obj;
+    }
+
+    public void Deallocate(T obj)
+    {
+      obj.Reset();
+      lock(this.freeList)
+        this.freeList.Push(obj);
     }
   }
 }
