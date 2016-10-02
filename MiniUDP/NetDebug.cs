@@ -1,5 +1,5 @@
 ﻿/*
- *  Common Utilities for Working with C# and Unity
+ *  MiniUDP - A Simple UDP Layer for Shipping and Receiving Byte Arrays
  *  Copyright (c) 2016 - Alexander Shoulson - http://ashoulson.com
  *
  *  This software is provided 'as-is', without any express or implied
@@ -19,13 +19,7 @@
 */
 
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Diagnostics;
-
-#if UNITY
-using UnityEngine;
-#endif
 
 namespace MiniUDP
 {
