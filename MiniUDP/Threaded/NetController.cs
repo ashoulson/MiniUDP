@@ -218,6 +218,7 @@ namespace MiniUDP
       {
         foreach (NetPeer peer in this.GetPeers())
         {
+          peer.Update(this.Time);
           switch (peer.Status)
           {
             case NetPeerStatus.Connecting:
@@ -264,7 +265,7 @@ namespace MiniUDP
     {
       NetEvent notification = null;
       while (this.notificationIn.TryDequeue(out notification))
-        if (notification.Peer.IsConnected)
+        if (notification.Peer.IsOpen)
           notification.Peer.QueueNotification(notification);
     }
 
@@ -282,7 +283,7 @@ namespace MiniUDP
           continue;
 
         this.peers.Add(pending.EndPoint, pending);
-        pending.KeepAlive(this.Time);
+        pending.OnReceiveOther(this.Time);
       }
     }
 
@@ -316,12 +317,14 @@ namespace MiniUDP
       }
 
       long time = this.Time;
-      if (longTick || peer.HasNotifications || peer.AckRequested)
+      if (peer.HasNotifications || peer.AckRequested)
       {
-        if (longTick)
-          peer.AdvancePing(time);
-        this.sender.SendCarrier(peer, time);
+        this.sender.SendCarrier(peer);
         peer.AckRequested = false;
+      }
+      if (longTick)
+      {
+        this.sender.SendPing(peer, this.Time);
       }
     }
 
@@ -403,6 +406,14 @@ namespace MiniUDP
                 this.HandleKick(peer, buffer, length);
                 break;
 
+              case NetPacketType.Ping:
+                this.HandlePing(peer, buffer, length);
+                break;
+
+              case NetPacketType.Pong:
+                this.HandlePong(peer, buffer, length);
+                break;
+
               case NetPacketType.Carrier:
                 this.HandleCarrier(peer, buffer, length);
                 break;
@@ -435,9 +446,11 @@ namespace MiniUDP
 
       if (this.ShouldCreatePeer(source, version))
       {
+        long curTime = this.Time;
         // Create and add the new peer as a client
-        NetPeer peer = new NetPeer(source, token, true, this.Time);
+        NetPeer peer = new NetPeer(source, token, true, curTime);
         this.peers.Add(source, peer);
+        peer.OnReceiveOther(curTime);
 
         // Accept the connection over the network
         this.sender.SendAccept(peer);
@@ -457,7 +470,7 @@ namespace MiniUDP
       if (peer.IsConnected || peer.IsClient)
         return;
 
-      peer.KeepAlive(this.Time);
+      peer.OnReceiveOther(this.Time);
       peer.Connected();
 
       this.eventOut.Enqueue(
@@ -473,6 +486,7 @@ namespace MiniUDP
       if (peer.IsConnected || peer.IsClient)
         return;
 
+      peer.OnReceiveOther(this.Time);
       this.ClosePeerSilent(peer);
 
       byte reason;
@@ -492,6 +506,8 @@ namespace MiniUDP
         return;
 
       bool isConnected = peer.IsConnected;
+
+      peer.OnReceiveOther(this.Time);
       this.ClosePeerSilent(peer);
 
       if (isConnected)
@@ -514,7 +530,7 @@ namespace MiniUDP
       }
     }
 
-    private void HandleCarrier(
+    private void HandlePing(
       NetPeer peer,
       byte[] buffer,
       int length)
@@ -523,18 +539,43 @@ namespace MiniUDP
         return;
 
       byte pingSeq;
-      byte pongSeq;
       byte loss;
-      ushort processTime;
+      int headerSize = 
+        NetIO.ReadProtocolHeader(buffer, out pingSeq, out loss);
+
+      peer.OnReceivePing(this.Time, loss);
+      this.sender.SendPong(peer, pingSeq);
+    }
+
+    private void HandlePong(
+      NetPeer peer,
+      byte[] buffer,
+      int length)
+    {
+      if (peer.IsConnected == false)
+        return;
+
+      byte pongSeq;
+      byte unused2;
+      int headerSize = 
+        NetIO.ReadProtocolHeader(buffer, out pongSeq, out unused2);
+
+      peer.OnReceivePong(this.Time, pongSeq);
+    }
+
+    private void HandleCarrier(
+      NetPeer peer,
+      byte[] buffer,
+      int length)
+    {
+      if (peer.IsConnected == false)
+        return;
+
       ushort notificationAck;
       ushort notificationSeq;
       int headerSize = 
         NetIO.ReadCarrierHeader(
           buffer,
-          out pingSeq,
-          out pongSeq,
-          out loss,
-          out processTime,
           out notificationAck,
           out notificationSeq);
 
@@ -550,11 +591,13 @@ namespace MiniUDP
       if (success == false)
         return;
 
-      peer.KeepAlive(this.Time);
-      peer.LogNotificationAck(notificationAck, this.RecycleEvent);
-      peer.ReceiveStatistics(this.Time, pingSeq, pongSeq, loss, processTime);
+      long curTime = this.Time;
+      peer.OnReceiveCarrier(curTime, notificationAck, this.RecycleEvent);
+
+      // The packet contains the first sequence number. All subsequent
+      // notifications have sequence numbers in order, so we just increment.
       foreach (NetEvent notification in this.reusableQueue)
-        if (peer.LogNotificationSequence(notificationSeq++))
+        if (peer.OnReceiveNotification(curTime, notificationSeq++))
           this.eventOut.Enqueue(notification);
     }
 
@@ -571,8 +614,7 @@ namespace MiniUDP
         buffer,
         out payloadSeq);
 
-      peer.KeepAlive(this.Time);
-      if (peer.LogPayloadSequence(payloadSeq))
+      if (peer.OnReceivePayload(this.Time, payloadSeq))
       {
         this.eventOut.Enqueue(
           this.CreateEvent(

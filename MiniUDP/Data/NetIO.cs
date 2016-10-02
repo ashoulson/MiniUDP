@@ -152,6 +152,8 @@ namespace MiniUDP
     //    Accept: 0, 0
     //    Reject: InternalReason, 0
     //    Disconnect: InternalReason, UserReason
+    //    Ping: PingSeq, Loss
+    //    Pong: PingSeq, 0
     internal static int PackProtocolHeader(
       byte[] buffer,
       NetPacketType type, 
@@ -195,40 +197,24 @@ namespace MiniUDP
 
     internal static int PackCarrierHeader(
       byte[] buffer,
-      byte pingSeq, 
-      byte pongSeq,
-      byte loss,
-      ushort processing,
-      ushort messageAck,
-      ushort firstSeq)
+      ushort notificationAck,
+      ushort notificationSeq)
     {
       buffer[0] = (byte)NetPacketType.Carrier;
-      buffer[1] = pingSeq;
-      buffer[2] = pongSeq;
-      buffer[3] = loss;
-      NetIO.PackU16(buffer, 4, processing);
-      NetIO.PackU16(buffer, 6, messageAck);
-      NetIO.PackU16(buffer, 8, firstSeq);
-      return 10;
+      NetIO.PackU16(buffer, 1, notificationAck);
+      NetIO.PackU16(buffer, 3, notificationSeq);
+      return 5;
     }
 
     internal static int ReadCarrierHeader(
       byte[] buffer,
-      out byte pingSeq,
-      out byte pongSeq,
-      out byte loss,
-      out ushort processTime,
       out ushort notificationAck,
       out ushort notificationSeq) // The sequence # of the first notification
     {
       // Already know the type
-      pingSeq = buffer[1];
-      pongSeq = buffer[2];
-      loss = buffer[3];
-      processTime = NetIO.ReadU16(buffer, 4);
-      notificationAck = NetIO.ReadU16(buffer, 6);
-      notificationSeq = NetIO.ReadU16(buffer, 8);
-      return 10;
+      notificationAck = NetIO.ReadU16(buffer, 1);
+      notificationSeq = NetIO.ReadU16(buffer, 3);
+      return 5;
     }
 
     /// <summary>

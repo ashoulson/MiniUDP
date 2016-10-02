@@ -84,32 +84,48 @@ namespace MiniUDP
     }
 
     /// <summary>
+    /// Sends a generic ping packet.
+    /// </summary>
+    internal SocketError SendPing(
+      NetPeer peer,
+      long curTime)
+    {
+      int length =
+        NetIO.PackProtocolHeader(
+          this.sendBuffer,
+          NetPacketType.Ping,
+          peer.GeneratePing(curTime),
+          peer.GenerateLoss());
+      return this.writer.TrySend(peer.EndPoint, this.sendBuffer, length);
+    }
+
+    /// <summary>
+    /// Sends a generic pong packet.
+    /// </summary>
+    internal SocketError SendPong(
+      NetPeer peer,
+      byte pingSeq)
+    {
+      int length =
+        NetIO.PackProtocolHeader(
+          this.sendBuffer,
+          NetPacketType.Pong,
+          pingSeq,
+          0);
+      return this.writer.TrySend(peer.EndPoint, this.sendBuffer, length);
+    }
+
+    /// <summary>
     /// Sends a scheduled carrier message containing ping information
     /// and reliable messages (if any).
     /// </summary>
     internal SocketError SendCarrier(
-      NetPeer peer,
-      long curTime)
+      NetPeer peer)
     {
-      byte pingSeq;
-      byte pongSeq;
-      byte loss;
-      ushort processTime;
-      peer.ProduceStatistics(
-        curTime,
-        out pingSeq,
-        out pongSeq,
-        out loss,
-        out processTime);
-
       int headerLength =
         NetIO.PackCarrierHeader(
           this.sendBuffer,
-          pingSeq,
-          pongSeq,
-          loss,
-          processTime,
-          peer.NotifyAck,
+          peer.NotificationAck,
           peer.GetFirstSequence());
       int packedLength =
         NetIO.PackNotifications(

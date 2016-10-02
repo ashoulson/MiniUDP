@@ -16,8 +16,9 @@ namespace Tests
       for (int i = 0; i < 20; i++)
         netPeer.QueueNotification(new NetEvent());
 
-      netPeer.LogNotificationAck(10, (x) => x = null);
-      Assert.AreEqual(netPeer.Outgoing.Count(), 9);
+      netPeer.OnReceiveCarrier(0, 10, (x) => x = null);
+      // First sequence number is 1, so we should have 10 remaining
+      Assert.AreEqual(10, netPeer.Outgoing.Count());
     }
   }
 }

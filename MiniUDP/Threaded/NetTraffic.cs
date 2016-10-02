@@ -19,9 +19,6 @@
 */
 
 using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Text.RegularExpressions;
 
 namespace MiniUDP
 {
@@ -32,7 +29,6 @@ namespace MiniUDP
   {
     internal const int LOSS_BITS = 256;
     internal const int PING_HISTORY = 64;
-    internal const int PING_WINDOW = 16;
 
     /// <summary>
     /// Sliding bit array keeping a history of received sequence numbers.
@@ -159,178 +155,222 @@ namespace MiniUDP
     /// </summary>
     internal class PingCounter
     {
-      public byte CurrentPingSeq
-      {
-        get { return (byte)this.currentPingSeq; }
-      }
-
-      private readonly long[] timeHistory;
-      private readonly byte[] timeSequence;
+      private readonly long[] pingTimes;
+      private readonly byte[] pingSequences;
       private byte currentPingSeq;
 
       public PingCounter()
       {
-        this.timeHistory = new long[NetTraffic.PING_HISTORY];
-        this.timeSequence = new byte[NetTraffic.PING_HISTORY];
-        for (int i = 0; i < this.timeHistory.Length; i++)
-          this.timeHistory[i] = -1;
+        this.pingTimes = new long[NetTraffic.PING_HISTORY];
+        this.pingSequences = new byte[NetTraffic.PING_HISTORY];
+        for (int i = 0; i < this.pingTimes.Length; i++)
+          this.pingTimes[i] = -1;
       }
 
       /// <summary>
       /// Creates a new outgoing ping. Stores both that ping's sequence
       /// and the time it was created.
       /// </summary>
-      public void CreatePing(long curTime)
+      public byte CreatePing(long curTime)
       {
         this.currentPingSeq++;
         int index = this.currentPingSeq % NetTraffic.PING_HISTORY;
-        this.timeHistory[index] = curTime;
-        this.timeSequence[index] = this.currentPingSeq;
+        this.pingTimes[index] = curTime;
+        this.pingSequences[index] = this.currentPingSeq;
+        return this.currentPingSeq;
       }
 
       /// <summary>
       /// Returns the time the ping was created for the given pong.
       /// Checks to make sure the stored slot corresponds to the sequence.
       /// </summary>
-      public long ConsumePong(int pongSeq)
+      public long ConsumePong(byte pongSeq)
       {
         int index = pongSeq % NetTraffic.PING_HISTORY;
-        if (this.timeSequence[index] != pongSeq)
+        if (this.pingSequences[index] != pongSeq)
           return -1;
 
-        long pingTime = this.timeHistory[index];
-        this.timeHistory[index] = -1;
+        long pingTime = this.pingTimes[index];
+        this.pingTimes[index] = -1;
         return pingTime;
       }
     }
 
     /// <summary>
-    /// Computes the average of a float array.
+    /// Computes the average ping over a window.
     /// </summary>
-    private static float Average(int[] window)
+    private static float PingAverage(int[] window)
     {
       float sum = 0.0f;
+      int count = 0;
       for (int i = 0; i < window.Length; i++)
-        sum += window[i];
-      return (sum / window.Length);
+      {
+        if (window[i] >= 0)
+        {
+          sum += window[i];
+          count++;
+        }
+      }
+
+      if (count > 0)
+        return (sum / count);
+      return -1.0f;
     }
 
     // May be accessed from main thread
     public float Ping { get; private set; }
     public float LocalLoss { get; private set; }
     public float RemoteLoss { get; private set; }
+    public long TimeSinceCreation { get; private set; }
+    public long TimeSinceReceive { get; private set; }
+    public long TimeSincePayload { get; private set; }
+    public long TimeSinceNotification { get; private set; }
+    public long TimeSincePong { get; private set; }
 
-    internal byte PingSeq { get { return this.outgoingPing.CurrentPingSeq; } }
+    internal ushort NotificationAck { get { return this.notificationAck; } }
 
     private readonly LossCounter payloadLoss;
     private readonly PingCounter outgoingPing;
     private readonly int[] pingWindow;
+    private readonly long creationTime;
 
+    private ushort notificationAck;
     private int pingWindowIndex;
-    private byte lastPingRecvSeq;
-    private long lastPingRecvTime;
-    private byte lastRecvLoss;
-    private long lastRecvTime; // Time we last received anything
 
-    internal NetTraffic()
+    private byte lastRecvLoss;
+    private long lastPacketRecvTime; // Time we last received anything
+    private long lastPayloadRecvTime;
+    private long lastNotificationRecvTime;
+    private long lastPongRecvTime;
+
+    internal NetTraffic(long creationTime)
     {
       this.payloadLoss = new LossCounter();
       this.outgoingPing = new PingCounter();
-      this.pingWindow = new int[NetTraffic.PING_WINDOW];
+      this.pingWindow = new int[NetConfig.PING_SMOOTHING_WINDOW];
+      this.creationTime = creationTime;
 
+      this.notificationAck = 0;
       this.pingWindowIndex = 0;
-      this.lastPingRecvSeq = 0;
-      this.lastPingRecvTime = 0;
       this.lastRecvLoss = 0;
-      this.lastRecvTime = 0;
+
+      this.lastPacketRecvTime = creationTime;
+      this.lastPayloadRecvTime = creationTime;
+      this.lastNotificationRecvTime = creationTime;
+      this.lastPongRecvTime = creationTime;
+
+      for (int i = 0; i < this.pingWindow.Length; i++)
+        this.pingWindow[i] = -1;
+    }
+
+    internal void Update(long curTime)
+    {
+      this.TimeSinceCreation = curTime - this.creationTime;
+      this.TimeSinceReceive = curTime - this.lastPacketRecvTime;
+      this.TimeSincePayload = curTime - this.lastPayloadRecvTime;
+      this.TimeSinceNotification = curTime - this.lastNotificationRecvTime;
+      this.TimeSincePong = curTime - this.lastPongRecvTime;
+
+      if (this.TimeSincePong > (this.pingWindow.Length * 1000))
+      {
+        for (int i = 0; i < this.pingWindow.Length; i++)
+          this.pingWindow[i] = -1;
+        this.Ping = -1.0f;
+      }
     }
 
     internal long GetTimeSinceRecv(long curTime)
     {
-      return curTime - this.lastRecvTime;
+      return curTime - this.lastPacketRecvTime;
     }
 
-    internal void AdvancePing(long curTime)
+    internal byte GeneratePing(long curTime)
     {
-      this.outgoingPing.CreatePing(curTime);
+      return this.outgoingPing.CreatePing(curTime);
     }
 
-    internal void GeneratePing(out byte pingSeq)
+    internal byte GenerateLoss()
     {
-      pingSeq = this.outgoingPing.CurrentPingSeq;
-    }
-
-    internal void GeneratePong(
-      long curTime,
-      out byte pongSeq,
-      out ushort processTime)
-    {
-      pongSeq = this.lastPingRecvSeq;
-      long timeDiff = curTime - this.lastPingRecvTime;
-      if (timeDiff < 0)
-        timeDiff = 0;
-      if (timeDiff > ushort.MaxValue)
-        timeDiff = ushort.MaxValue;
-      processTime = (ushort)timeDiff;
-    }
-
-    internal void GenerateLoss(out byte loss)
-    {
-      loss = (byte)(this.payloadLoss.ComputeLostAmount());
-    }
-
-    internal void ReceivePacket(long curTime)
-    {
-      this.lastRecvTime = curTime;
+      return (byte)(this.payloadLoss.ComputeLostAmount());
     }
 
     /// <summary>
-    /// Logs the arrival time of a ping sequence, if it's new.
+    /// Processes the loss value from a received ping.
     /// </summary>
-    internal void ReceivePing(long curTime, byte pingSeq)
+    internal void OnReceivePing(long curTime, byte loss)
     {
-      if (NetUtil.ByteSeqDiff(pingSeq, this.lastPingRecvSeq) > 0)
-      {
-        this.lastPingRecvTime = curTime;
-        this.lastPingRecvSeq = pingSeq;
-      }
+      this.lastPacketRecvTime = curTime;
+      this.lastRecvLoss = loss;
+
+      // Recompute since it may be read on the main thread
+      this.RemoteLoss = this.lastRecvLoss / (float)NetTraffic.LOSS_BITS;
     }
 
-    internal void ReceivePong(long curTime, byte pongSeq, ushort processTime)
+    /// <summary>
+    /// Receives a pong and updates connection timings.
+    /// </summary>
+    internal void OnReceivePong(long curTime, byte pongSeq)
     {
+      // Reject it if it's too old, including statistics for it
       long creationTime = this.outgoingPing.ConsumePong(pongSeq);
       if (creationTime < 0)
         return;
-      long diff = (curTime - creationTime) - processTime;
+      long diff = curTime - creationTime;
       if (diff < 0)
         return;
 
+      this.lastPacketRecvTime = curTime;
+      this.lastPongRecvTime = curTime;
+
       this.pingWindow[this.pingWindowIndex] = (int)diff;
       this.pingWindowIndex = 
-        (this.pingWindowIndex + 1) % NetTraffic.PING_WINDOW;
+        (this.pingWindowIndex + 1) % this.pingWindow.Length;
 
-      // Precompute public since it may be read on the main thread
-      this.Ping = NetTraffic.Average(this.pingWindow);
+      // Recompute since it may be read on the main thread
+      this.Ping = NetTraffic.PingAverage(this.pingWindow);
     }
 
-    internal void ReceiveLoss(byte loss)
+    /// <summary>
+    /// Logs the receipt of a payload for packet loss calculation.
+    /// Returns false iff the payload is too old and should be rejected.
+    /// </summary>
+    internal bool OnReceivePayload(long curTime, ushort payloadSeq)
     {
-      this.lastRecvLoss = loss;
-
-      // Precompute public since it may be read on the main thread
-      this.RemoteLoss = 
-        this.lastRecvLoss / (float)NetTraffic.LOSS_BITS;
-    }
-
-    internal bool ReceivePayloadSequence(ushort sequence)
-    {
-      if (this.payloadLoss.LogSequence(sequence) == false)
+      // Reject it if it's too old, including statistics for it
+      if (this.payloadLoss.LogSequence(payloadSeq) == false)
         return false;
 
-      // Precompute public since it may be read on the main thread
+      this.lastPacketRecvTime = curTime;
+      this.lastPayloadRecvTime = curTime;
+
+      // Recompute since it may be read on the main thread
       this.LocalLoss = 
         this.payloadLoss.ComputeLostAmount() / (float)NetTraffic.LOSS_BITS;
       return true;
+    }
+
+    /// <summary>
+    /// Logs the receipt of a notification for timing and keepalive.
+    /// Returns false iff the notification is too old and should be rejected.
+    /// </summary>
+    internal bool OnReceiveNotification(long curTime, ushort notificationSeq)
+    {
+      // Reject it if it's too old, including statistics for it
+      if (NetUtil.UShortSeqDiff(notificationSeq, this.NotificationAck) <= 0)
+        return false;
+
+      this.notificationAck = notificationSeq;
+      this.lastPacketRecvTime = curTime;
+      this.lastNotificationRecvTime = curTime;
+      return true;
+    }
+
+    /// <summary>
+    /// For all other packet types.
+    /// </summary>
+    internal void OnReceiveOther(long curTime)
+    {
+      this.lastPacketRecvTime = curTime;
     }
   }
 }

@@ -184,11 +184,11 @@ namespace MiniUDP
     // This region should only be accessed by the BACKGROUND thread
 
     internal IEnumerable<NetEvent> Outgoing { get { return this.outgoing; } }
-    internal bool HasNotifications { get { return (this.outgoing.Count > 0); } }
     internal NetPeerStatus Status { get { return this.status; } }
+    internal bool HasNotifications { get { return (this.outgoing.Count > 0); } }
+    internal ushort NotificationAck { get { return this.traffic.NotificationAck; } }
 
     internal bool AckRequested { get; set; }
-    internal ushort NotifyAck { get; private set; }
 
     private readonly NetTraffic traffic;
     private readonly Queue<NetEvent> outgoing;
@@ -197,7 +197,7 @@ namespace MiniUDP
     private readonly string token;
 
     private NetCore core;
-    private long creationTick;
+    private ushort notificationSeq;
 
     internal NetPeer(
       IPEndPoint endPoint, 
@@ -212,15 +212,14 @@ namespace MiniUDP
       this.payloadSeqOut = 0;
 
       this.AckRequested = false;
-      this.NotifyAck = 0;
 
-      this.traffic = new NetTraffic();
+      this.traffic = new NetTraffic(creationTick);
       this.outgoing = new Queue<NetEvent>();
       this.endPoint = endPoint;
       this.isClient = isClient;
       this.token = token;
 
-      this.creationTick = creationTick;
+      this.notificationSeq = 1;
 
       if (isClient) // Client peers are created after a successful connection
         this.status = NetPeerStatus.Connected;
@@ -228,20 +227,26 @@ namespace MiniUDP
         this.status = NetPeerStatus.Connecting;
     }
 
+    internal void Update(long curTime)
+    {
+      this.traffic.Update(curTime);
+    }
+
     /// <summary>
     /// Queues a new notification to be send out reliably during ticks.
     /// </summary>
-    internal void QueueNotification(NetEvent data)
+    internal bool QueueNotification(NetEvent data)
     {
       int notificationCount = this.outgoing.Count;
       if (notificationCount >= NetConfig.MAX_PENDING_NOTIFICATIONS)
       {
-        NetDebug.LogError("Notification queue full, ignoring latest");
-        return;
+        NetDebug.LogError("Notification queue full");
+        return false;
       }
 
-      data.SetSequence(this.NotifyAck++);
+      data.SetSequence(this.notificationSeq++);
       this.outgoing.Enqueue(data);
+      return true;
     }
 
     /// <summary>
@@ -261,11 +266,13 @@ namespace MiniUDP
     }
 
     /// <summary>
-    /// Notifies that we have received useful data.
+    /// If we have outgoing notifications, returns the sequence of the first.
     /// </summary>
-    internal void KeepAlive(long curTime)
+    internal ushort GetFirstSequence()
     {
-      this.traffic.ReceivePacket(curTime);
+      if (this.outgoing.Count > 0)
+        return this.outgoing.Peek().Sequence;
+      return 0;
     }
 
     /// <summary>
@@ -279,91 +286,80 @@ namespace MiniUDP
     /// <summary>
     /// Advances the outgoing ping sequence.
     /// </summary>
-    internal void AdvancePing(long curTime)
+    internal byte GeneratePing(long curTime)
     {
-      this.traffic.AdvancePing(curTime);
+      return this.traffic.GeneratePing(curTime);
     }
 
     /// <summary>
     /// Produces statistics for carrier packets.
     /// </summary>
-    internal void ProduceStatistics(
-      long curTime,
-      out byte pingSeq,
-      out byte pongSeq,
-      out byte loss,
-      out ushort processTime)
+    internal byte GenerateLoss()
     {
-      this.traffic.GeneratePing(out pingSeq);
-      this.traffic.GeneratePong(curTime, out pongSeq, out processTime);
-      this.traffic.GenerateLoss(out loss);
+      return this.traffic.GenerateLoss();
     }
 
     /// <summary>
-    /// Processes statistics received from carrier packets.
+    /// Processes statistics received from pong packets.
     /// </summary>
-    internal void ReceiveStatistics(
-      long curTime,
-      byte pingSeq,
-      byte pongSeq,
-      byte loss,
-      ushort processTime)
+    internal void OnReceivePing(long curTime, byte loss)
     {
-      this.traffic.ReceivePing(curTime, pingSeq);
-      this.traffic.ReceivePong(curTime, pongSeq, processTime);
-      this.traffic.ReceiveLoss(loss);
+      this.traffic.OnReceivePing(curTime, loss);
     }
 
     /// <summary>
-    /// If we have outgoing notifications, returns the sequence of the first.
+    /// Processes statistics received from pong packets.
     /// </summary>
-    internal ushort GetFirstSequence()
+    internal void OnReceivePong(long curTime, byte pongSeq)
     {
-      if (this.outgoing.Count > 0)
-        return this.outgoing.Peek().Sequence;
-      return 0;
+      this.traffic.OnReceivePong(curTime, pongSeq);
+    }
+
+    /// <summary>
+    /// Cleans out any notifications older than the received carrier ack.
+    /// </summary>
+    internal void OnReceiveCarrier(
+      long curTime,
+      ushort notificationAck,
+      Action<NetEvent> deallocate)
+    {
+      this.traffic.OnReceiveOther(curTime);
+      while (this.outgoing.Count > 0)
+      {
+        NetEvent front = this.outgoing.Peek();
+        if (NetUtil.UShortSeqDiff(notificationAck, front.Sequence) < 0)
+          break;
+        deallocate.Invoke(this.outgoing.Dequeue());
+      }
     }
 
     /// <summary>
     /// Logs the payload's sequence ID to record payload packet loss.
     /// Returns true if we should accept the payload, false if it's too old.
     /// </summary>
-    internal bool LogPayloadSequence(ushort sequence)
+    internal bool OnReceivePayload(long curTime, ushort sequence)
     {
-      return this.traffic.ReceivePayloadSequence(sequence);
+      return this.traffic.OnReceivePayload(curTime, sequence);
     }
 
     /// <summary>
-    /// Receives a notification and updates its ack counter. 
+    /// Processes a notification and updates our ack counter. 
     /// Return true iff the notification is new.
     /// </summary>
-    internal bool LogNotificationSequence(ushort sequence)
+    internal bool OnReceiveNotification(long curTime, ushort notificationSeq)
     {
       this.AckRequested = true;
-      int diff = NetUtil.UShortSeqDiff(sequence, this.NotifyAck);
-      if (diff > 0)
-      {
-        this.NotifyAck = sequence;
-        return true;
-      }
-      return false;
+      return this.traffic.OnReceiveNotification(curTime, notificationSeq);
     }
 
     /// <summary>
-    /// Cleans up all notifications older than the given ack.
+    /// Records the fact that we've received data.
     /// </summary>
-    internal void LogNotificationAck(
-      ushort ack,
-      Action<NetEvent> deallocate)
+    internal void OnReceiveOther(long curTime)
     {
-      while (this.outgoing.Count > 0)
-      {
-        NetEvent front = this.outgoing.Peek();
-        if (NetUtil.UShortSeqDiff(ack, front.Sequence) < 0)
-          break;
-        deallocate.Invoke(this.outgoing.Dequeue());
-      }
+      this.traffic.OnReceiveOther(curTime);
     }
+
     #endregion
   }
 }
