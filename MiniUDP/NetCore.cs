@@ -142,6 +142,10 @@ namespace MiniUDP
               peer.OnPayloadReceived(evnt.EncodedData, evnt.EncodedLength);
               break;
 
+            case NetEventType.Notification:
+              peer.OnNotificationReceived(evnt.EncodedData, evnt.EncodedLength);
+              break;
+            
             default:
               throw new NotImplementedException();
           }
@@ -151,19 +155,37 @@ namespace MiniUDP
       }
     }
 
-    internal void OnPeerClosed(NetPeer peer, byte reason)
+
+    /// <summary>
+    /// Adds an outgoing notification to the controller processing queue.
+    /// </summary>
+    internal void QueueNotification(
+      NetPeer peer,
+      byte[] buffer,
+      int length)
+    {
+      this.controller.QueueNotification(peer, buffer, length);
+    }
+
+    /// <summary>
+    /// Immediately sends out a disconnect message to a peer.
+    /// </summary>
+    internal void NotifyPeerClosed(NetPeer peer, byte reason)
     {
       this.SendUserDisconnect(peer.EndPoint, reason);
     }
 
+    /// <summary>
+    /// Immediately sends out a payload to a peer.
+    /// </summary>
     internal SocketError SendPayload(
       NetPeer peer, 
       ushort sequence, 
-      byte[] data, 
+      byte[] buffer, 
       int length)
     {
       int position = NetIO.PackPayloadHeader(this.reusableBuffer, sequence);
-      Array.Copy(data, 0, this.reusableBuffer, position, length);
+      Array.Copy(buffer, 0, this.reusableBuffer, position, length);
       position += length;
       return this.writer.TrySend(peer.EndPoint, this.reusableBuffer, position);
     }

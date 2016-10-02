@@ -8,6 +8,7 @@ using SampleCommon;
 class Program
 {
   private static NetPeer peer;
+  private static int count = 0;
 
   static void Main(string[] args)
   {
@@ -40,7 +41,11 @@ class Program
 
   private static void Clock_OnFixedUpdate()
   {
-    byte[] data = Encoding.UTF8.GetBytes("Testing 1 2 3 4");
+    byte[] data;
+    data = Encoding.UTF8.GetBytes("Payload " + count);
     Program.peer.SendPayload(data, data.Length);
+    data = Encoding.UTF8.GetBytes("Notification " + count);
+    Program.peer.QueueNotification(data, data.Length);
+    count++;
   }
 }

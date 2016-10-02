@@ -52,11 +52,17 @@ namespace SampleCommon
       peer.PeerClosedShutdown += Peer_PeerClosedShutdown;
       peer.PeerClosedKicked += Peer_PeerClosedKicked;
       peer.PayloadReceived += Peer_PayloadReceived;
+      peer.NotificationReceived += Peer_NotificationReceived;
     }
 
     private void Peer_PayloadReceived(NetPeer peer, byte[] data, int dataLength)
     {
       Console.WriteLine(peer.EndPoint + " got payload: \"" + Encoding.UTF8.GetString(data, 0, dataLength) + "\"");
+    }
+
+    private void Peer_NotificationReceived(NetPeer peer, byte[] data, int dataLength)
+    {
+      Console.WriteLine(peer.EndPoint + " got notification: \"" + Encoding.UTF8.GetString(data, 0, dataLength) + "\"");
     }
 
     private void Peer_PeerClosedTimeout(NetPeer peer)
