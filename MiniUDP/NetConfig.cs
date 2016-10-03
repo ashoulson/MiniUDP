@@ -81,6 +81,17 @@ namespace MiniUDP
     public static int SleepTime = 1;
     #endregion
 
+#if DEBUG
+    #region Latency Simulation
+    public static bool LatencySimulation = true;
+    public static int MinimumLatency = 120;
+    public static int MaximumLatency = 220;
+    public static float LatencyTurbulence = 0.5f;
+    public static float LossChance = 0.10f;
+    public static float LossTurbulence = 2.0f;
+    #endregion
+#endif
+
     #region Socket Config
     internal const int SOCKET_BUFFER_SIZE = 2048;
     #endregion

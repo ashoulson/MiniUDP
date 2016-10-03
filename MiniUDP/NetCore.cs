@@ -32,25 +32,13 @@ namespace MiniUDP
     public event NetPeerConnectEvent PeerConnected;
 
     private readonly NetController controller;
-    private readonly NetSocket socket;
-    private readonly NetSender sender;
-    private readonly byte[] reusableBuffer;
     private Thread controllerThread;
 
     public NetCore(string version, bool allowConnections)
     {
       if (version == null)
         version = "";
-
-      this.socket = new NetSocket();
-      this.sender = new NetSender(this.socket.CreateWriter());
-      this.reusableBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
-      this.controller = 
-        new NetController(
-          this.socket.CreateReader(), // Not thread safe, need one per thread
-          this.socket.CreateWriter(), // Not thread safe, need one per thread
-          version,
-          allowConnections);
+      this.controller = new NetController(version, allowConnections);
     }
 
     public NetPeer Connect(IPEndPoint endpoint, string token)
@@ -62,7 +50,7 @@ namespace MiniUDP
 
     public void Host(int port)
     {
-      this.socket.Bind(port);
+      this.controller.Bind(port);
       this.Start();
     }
 
@@ -87,7 +75,7 @@ namespace MiniUDP
     {
       this.controller.Stop();
       this.controllerThread.Join(timeout);
-      this.socket.Close();
+      this.controller.Close();
     }
 
     public void PollEvents()
@@ -155,6 +143,25 @@ namespace MiniUDP
       }
     }
 
+    /// <summary>
+    /// Immediately sends out a disconnect message to a peer.
+    /// </summary>
+    internal void SendKick(NetPeer peer, byte reason)
+    {
+      this.controller.SendKick(peer, reason);
+    }
+
+    /// <summary>
+    /// Immediately sends out a payload to a peer.
+    /// </summary>
+    internal SocketError SendPayload(
+      NetPeer peer,
+      ushort sequence,
+      byte[] data,
+      int length)
+    {
+      return this.controller.SendPayload(peer, sequence, data, length);
+    }
 
     /// <summary>
     /// Adds an outgoing notification to the controller processing queue.
@@ -165,26 +172,6 @@ namespace MiniUDP
       int length)
     {
       this.controller.QueueNotification(peer, buffer, length);
-    }
-
-    /// <summary>
-    /// Immediately sends out a disconnect message to a peer.
-    /// </summary>
-    internal void NotifyPeerClosed(NetPeer peer, byte reason)
-    {
-      this.sender.SendKick(peer, NetKickReason.User, reason);
-    }
-
-    /// <summary>
-    /// Immediately sends out a payload to a peer.
-    /// </summary>
-    internal SocketError SendPayload(
-      NetPeer peer, 
-      ushort sequence, 
-      byte[] data, 
-      int length)
-    {
-      return this.sender.SendPayload(peer, sequence, data, length);
     }
   }
 }
