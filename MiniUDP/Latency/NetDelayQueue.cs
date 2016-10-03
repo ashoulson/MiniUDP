@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if DEBUG
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
@@ -7,7 +8,7 @@ using MiniUDP.Util;
 
 namespace MiniUDP
 {
-  internal class NetLossyQueue
+  internal class NetDelayQueue
   {
     private readonly static Noise PingNoise = new Noise();
     private readonly static Noise LossNoise = new Noise();
@@ -51,18 +52,18 @@ namespace MiniUDP
     private readonly Heap<Entry> entries;
     private readonly Stopwatch timer;
 
-    public NetLossyQueue()
+    public NetDelayQueue()
     {
       this.entries = new Heap<Entry>();
       this.timer = new Stopwatch();
       this.timer.Start();
     }
 
-    public void Enqueue(IPEndPoint destination, byte[] buffer, int length)
+    public void Enqueue(IPEndPoint endPoint, byte[] buffer, int length)
     {
       // See if we should drop the packet
       float loss =
-        NetLossyQueue.LossNoise.GetValue(
+        NetDelayQueue.LossNoise.GetValue(
           this.timer.ElapsedMilliseconds,
            NetConfig.LossTurbulence);
       if (loss < NetConfig.LossChance)
@@ -72,14 +73,14 @@ namespace MiniUDP
       float latencyRange = 
         NetConfig.MaximumLatency - NetConfig.MinimumLatency;
       float latencyNoise =
-        NetLossyQueue.PingNoise.GetValue(
+        NetDelayQueue.PingNoise.GetValue(
           this.timer.ElapsedMilliseconds,
           NetConfig.LatencyTurbulence);
       int latency = 
         (int)((latencyNoise * latencyRange) + NetConfig.MinimumLatency);
 
       long releaseTime = this.timer.ElapsedMilliseconds + latency;
-      this.entries.Add(new Entry(releaseTime, destination, buffer, length));
+      this.entries.Add(new Entry(releaseTime, endPoint, buffer, length));
     }
 
     public bool TryDequeue(
@@ -105,5 +106,11 @@ namespace MiniUDP
       }
       return false;
     }
+
+    public void Clear()
+    {
+      this.entries.Clear();
+    }
   }
 }
+#endif

@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if DEBUG
+using System;
 using System.Collections.Generic;
 
 namespace MiniUDP.Util
@@ -28,6 +29,11 @@ namespace MiniUDP.Util
       if (comparer == null)
         throw new ArgumentNullException("comparer");
       this.Comparer = comparer;
+    }
+
+    public void Clear()
+    {
+      this.tail = 0;
     }
 
     public void Add(T item)
@@ -133,3 +139,4 @@ namespace MiniUDP.Util
     }
   }
 }
+#endif

@@ -13,6 +13,7 @@ class Program
 
   static void Main(string[] args)
   {
+    NetConfig.LatencySimulation = true;
     Connector client = new Connector("Sample1.0", false);
 
     Clock fastClock = new Clock(0.02f);

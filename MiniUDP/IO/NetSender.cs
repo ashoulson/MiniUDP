@@ -41,7 +41,7 @@ namespace MiniUDP
       this.socket = socket;
 
 #if DEBUG
-      this.outQueue = new NetLossyQueue();
+      this.outQueue = new NetDelayQueue();
 #endif
     }
 
@@ -220,7 +220,7 @@ namespace MiniUDP
 
     #region Latency Simulation
 #if DEBUG
-    private readonly NetLossyQueue outQueue;
+    private readonly NetDelayQueue outQueue;
 
     internal void Update()
     {

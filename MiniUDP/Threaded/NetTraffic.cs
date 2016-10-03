@@ -27,7 +27,7 @@ namespace MiniUDP
   /// </summary>
   public class NetTraffic
   {
-    internal const int LOSS_BITS = 128;
+    internal const int LOSS_BITS = 224;
     internal const int PING_HISTORY = 64;
 
     /// <summary>
