@@ -24,7 +24,7 @@ using System.Text;
 
 namespace MiniUDP
 {
-  internal static class NetIO
+  internal static class NetEncoding
   {
     internal static NetPacketType GetType(byte[] buffer)
     {
@@ -101,7 +101,7 @@ namespace MiniUDP
       NetDebug.Assert((byte)tokenBytes == tokenBytes);
 
       int bytesPacked =
-        NetIO.PackProtocolHeader(
+        NetEncoding.PackProtocolHeader(
           buffer,
           NetPacketType.Connect,
           (byte)versionBytes,
@@ -123,7 +123,7 @@ namespace MiniUDP
       byte versionBytes;
       byte tokenBytes;
       int headerBytes = 
-        NetIO.ReadProtocolHeader(
+        NetEncoding.ReadProtocolHeader(
           buffer, 
           out versionBytes, 
           out tokenBytes);
@@ -153,7 +153,7 @@ namespace MiniUDP
     //    Reject: InternalReason, 0
     //    Disconnect: InternalReason, UserReason
     //    Ping: PingSeq, Loss
-    //    Pong: PingSeq, 0
+    //    Pong: PingSeq, Dropped
     internal static int PackProtocolHeader(
       byte[] buffer,
       NetPacketType type, 
@@ -182,7 +182,7 @@ namespace MiniUDP
       ushort sequence)
     {
       buffer[0] = (byte)NetPacketType.Payload;
-      NetIO.PackU16(buffer, 1, sequence);
+      NetEncoding.PackU16(buffer, 1, sequence);
       return 3;
     }
 
@@ -191,7 +191,7 @@ namespace MiniUDP
       out ushort sequence)
     {
       // Already know the type
-      sequence = NetIO.ReadU16(buffer, 1);
+      sequence = NetEncoding.ReadU16(buffer, 1);
       return 3;
     }
 
@@ -201,8 +201,8 @@ namespace MiniUDP
       ushort notificationSeq)
     {
       buffer[0] = (byte)NetPacketType.Carrier;
-      NetIO.PackU16(buffer, 1, notificationAck);
-      NetIO.PackU16(buffer, 3, notificationSeq);
+      NetEncoding.PackU16(buffer, 1, notificationAck);
+      NetEncoding.PackU16(buffer, 3, notificationSeq);
       return 5;
     }
 
@@ -212,8 +212,8 @@ namespace MiniUDP
       out ushort notificationSeq) // The sequence # of the first notification
     {
       // Already know the type
-      notificationAck = NetIO.ReadU16(buffer, 1);
-      notificationSeq = NetIO.ReadU16(buffer, 3);
+      notificationAck = NetEncoding.ReadU16(buffer, 1);
+      notificationSeq = NetEncoding.ReadU16(buffer, 3);
       return 5;
     }
 

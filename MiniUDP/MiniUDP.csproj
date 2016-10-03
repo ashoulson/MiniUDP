@@ -36,16 +36,20 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Data\NetEvent.cs" />
-    <Compile Include="Data\NetIO.cs" />
-    <Compile Include="Data\NetSender.cs" />
+    <Compile Include="IO\NetEvent.cs" />
+    <Compile Include="IO\NetEncoding.cs" />
+    <Compile Include="IO\NetReceiver.cs" />
+    <Compile Include="IO\NetSender.cs" />
+    <Compile Include="Latency\NetLossyQueue.cs" />
+    <Compile Include="Latency\Util\Heap.cs" />
+    <Compile Include="Latency\Util\Noise.cs" />
     <Compile Include="NetUtil.cs" />
     <Compile Include="NetConfig.cs" />
     <Compile Include="NetCore.cs" />
     <Compile Include="NetDebug.cs" />
     <Compile Include="Threaded\NetPeer.cs" />
     <Compile Include="NetPool.cs" />
-    <Compile Include="NetSocket.cs" />
+    <Compile Include="IO\NetSocket.cs" />
     <Compile Include="Threaded\NetController.cs" />
     <Compile Include="Threaded\NetTraffic.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -19,21 +19,30 @@
 */
 
 using System;
-using System.Linq;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 
 namespace MiniUDP
 {
+  /// <summary>
+  /// Threadsafe class for writing and sending data via a socket.
+  /// </summary>
   internal class NetSender
   {
+    private readonly object sendLock;
     private readonly byte[] sendBuffer;
-    private readonly INetSocketWriter writer;
+    private readonly NetSocket socket;
 
-    internal NetSender(INetSocketWriter writer)
+    internal NetSender(NetSocket socket)
     {
+      this.sendLock = new object();
       this.sendBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
-      this.writer = writer;
+      this.socket = socket;
+
+#if DEBUG
+      this.outQueue = new NetLossyQueue();
+#endif
     }
 
     /// <summary>
@@ -43,12 +52,15 @@ namespace MiniUDP
       NetPeer peer,
       string version)
     {
-      int length =
-        NetIO.PackConnectRequest(
-          this.sendBuffer,
-          version,
-          peer.Token);
-      return this.writer.TrySend(peer.EndPoint, this.sendBuffer, length);
+      lock (this.sendLock)
+      {
+        int length =
+          NetEncoding.PackConnectRequest(
+            this.sendBuffer,
+            version,
+            peer.Token);
+        return this.TrySend(peer.EndPoint, this.sendBuffer, length);
+      }
     }
 
     /// <summary>
@@ -57,13 +69,16 @@ namespace MiniUDP
     internal SocketError SendAccept(
       NetPeer peer)
     {
-      int length =
-        NetIO.PackProtocolHeader(
+      lock (this.sendLock)
+      {
+        int length =
+        NetEncoding.PackProtocolHeader(
           this.sendBuffer,
           NetPacketType.ConnectAccept,
           0,
           0);
-      return this.writer.TrySend(peer.EndPoint, this.sendBuffer, length);
+        return this.TrySend(peer.EndPoint, this.sendBuffer, length);
+      }
     }
 
     /// <summary>
@@ -74,13 +89,16 @@ namespace MiniUDP
       NetKickReason kickReason,
       byte userReason = 0)
     {
-      int length =
-        NetIO.PackProtocolHeader(
+      lock (this.sendLock)
+      {
+        int length =
+        NetEncoding.PackProtocolHeader(
           this.sendBuffer,
           NetPacketType.Kick,
           (byte)kickReason,
           userReason);
-      return this.writer.TrySend(peer.EndPoint, this.sendBuffer, length);
+        return this.TrySend(peer.EndPoint, this.sendBuffer, length);
+      }
     }
 
     /// <summary>
@@ -90,13 +108,16 @@ namespace MiniUDP
       NetPeer peer,
       long curTime)
     {
-      int length =
-        NetIO.PackProtocolHeader(
+      lock (this.sendLock)
+      {
+        int length =
+        NetEncoding.PackProtocolHeader(
           this.sendBuffer,
           NetPacketType.Ping,
           peer.GeneratePing(curTime),
           peer.GenerateLoss());
-      return this.writer.TrySend(peer.EndPoint, this.sendBuffer, length);
+        return this.TrySend(peer.EndPoint, this.sendBuffer, length);
+      }
     }
 
     /// <summary>
@@ -104,15 +125,19 @@ namespace MiniUDP
     /// </summary>
     internal SocketError SendPong(
       NetPeer peer,
-      byte pingSeq)
+      byte pingSeq,
+      byte drop)
     {
-      int length =
-        NetIO.PackProtocolHeader(
+      lock (this.sendLock)
+      {
+        int length =
+        NetEncoding.PackProtocolHeader(
           this.sendBuffer,
           NetPacketType.Pong,
           pingSeq,
-          0);
-      return this.writer.TrySend(peer.EndPoint, this.sendBuffer, length);
+          drop);
+        return this.TrySend(peer.EndPoint, this.sendBuffer, length);
+      }
     }
 
     /// <summary>
@@ -122,19 +147,21 @@ namespace MiniUDP
     internal SocketError SendCarrier(
       NetPeer peer)
     {
-      int headerLength =
-        NetIO.PackCarrierHeader(
+      lock (this.sendLock)
+      {
+        int headerLength =
+        NetEncoding.PackCarrierHeader(
           this.sendBuffer,
           peer.NotificationAck,
           peer.GetFirstSequence());
-      int packedLength =
-        NetIO.PackNotifications(
-          this.sendBuffer,
-          headerLength,
-          peer.Outgoing);
-      int length = headerLength + packedLength;
-
-      return this.writer.TrySend(peer.EndPoint, this.sendBuffer, length);
+        int packedLength =
+          NetEncoding.PackNotifications(
+            this.sendBuffer,
+            headerLength,
+            peer.Outgoing);
+        int length = headerLength + packedLength;
+        return this.TrySend(peer.EndPoint, this.sendBuffer, length);
+      }
     }
 
     /// <summary>
@@ -144,13 +171,16 @@ namespace MiniUDP
       IPEndPoint destination,
       NetRejectReason rejectReason)
     {
-      int length =
-        NetIO.PackProtocolHeader(
+      lock (this.sendLock)
+      {
+        int length =
+        NetEncoding.PackProtocolHeader(
           this.sendBuffer,
           NetPacketType.ConnectReject,
           (byte)rejectReason,
           0);
-      return this.writer.TrySend(destination, this.sendBuffer, length);
+        return this.TrySend(destination, this.sendBuffer, length);
+      }
     }
 
 
@@ -163,10 +193,47 @@ namespace MiniUDP
       byte[] buffer,
       int length)
     {
-      int position = NetIO.PackPayloadHeader(this.sendBuffer, sequence);
-      Array.Copy(buffer, 0, this.sendBuffer, position, length);
-      position += length;
-      return this.writer.TrySend(peer.EndPoint, this.sendBuffer, position);
+      lock (this.sendLock)
+      {
+        int position = 
+          NetEncoding.PackPayloadHeader(this.sendBuffer, sequence);
+        Array.Copy(buffer, 0, this.sendBuffer, position, length);
+        position += length;
+        return this.TrySend(peer.EndPoint, this.sendBuffer, position);
+      }
     }
+
+    /// <summary>
+    /// Sends a packet over the network.
+    /// </summary>
+    private SocketError TrySend(IPEndPoint endPoint, byte[] buffer, int length)
+    {
+#if DEBUG
+      if (NetConfig.LatencySimulation)
+      {
+        this.outQueue.Enqueue(endPoint, buffer, length);
+        return SocketError.Success;
+      }
+#endif
+      return this.socket.TrySend(endPoint, buffer, length);
+    }
+
+    #region Latency Simulation
+#if DEBUG
+    private readonly NetLossyQueue outQueue;
+
+    internal void Update()
+    {
+      lock (this.sendLock)
+      {
+        IPEndPoint endPoint;
+        byte[] buffer;
+        int length;
+        while (this.outQueue.TryDequeue(out endPoint, out buffer, out length))
+          this.socket.TrySend(endPoint, buffer, length);
+      }
+    }
+#endif
+    #endregion
   }
 }

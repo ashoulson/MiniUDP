@@ -28,27 +28,6 @@ using System.Threading;
 
 namespace MiniUDP
 {
-  internal struct NetPending
-  {
-    internal IPEndPoint EndPoint { get { return this.endPoint; } }
-    internal string Token { get { return this.token; } }
-
-    private readonly IPEndPoint endPoint;
-    private readonly string token;
-
-    internal NetPending(IPEndPoint endPoint, string token)
-    {
-      this.endPoint = endPoint;
-
-      this.token = token;
-      if (Encoding.UTF8.GetByteCount(token) > NetConfig.MAX_TOKEN_BYTES)
-      {
-        NetDebug.LogError("Token too long, will be omitted");
-        this.token = "";
-      }
-    }
-  }
-
   internal class NetController
   {
     /// <summary>
@@ -99,6 +78,14 @@ namespace MiniUDP
     }
 
     /// <summary>
+    /// Optionally binds our socket before starting.
+    /// </summary>
+    internal void Bind(int port)
+    {
+      this.socket.Bind(port);
+    }
+
+    /// <summary>
     /// Signals the controller to begin.
     /// </summary>
     internal void Start()
@@ -120,6 +107,36 @@ namespace MiniUDP
     {
       this.isRunning = false;
     }
+
+    /// <summary>
+    /// Force-closes the socket, even if we haven't stopped running.
+    /// </summary>
+    internal void Close()
+    {
+      this.socket.Close();
+    }
+
+    /// <summary>
+    /// Immediately sends out a disconnect message to a peer.
+    /// Can be called on either thread.
+    /// </summary>
+    internal void SendKick(NetPeer peer, byte reason)
+    {
+      this.sender.SendKick(peer, NetKickReason.User, reason);
+    }
+
+    /// <summary>
+    /// Immediately sends out a payload to a peer.
+    /// Can be called on either thread.
+    /// </summary>
+    internal SocketError SendPayload(
+      NetPeer peer,
+      ushort sequence,
+      byte[] data,
+      int length)
+    {
+      return this.sender.SendPayload(peer, sequence, data, length);
+    }
     #endregion
 
     #region Background Thread
@@ -136,8 +153,9 @@ namespace MiniUDP
     private readonly Dictionary<IPEndPoint, NetPeer> peers;
     private readonly Stopwatch timer;
 
-    private readonly INetSocketReader reader;
+    private readonly NetSocket socket;
     private readonly NetSender sender;
+    private readonly NetReceiver receiver;
     private readonly string version;
 
     private readonly Queue<NetEvent> reusableQueue;
@@ -150,8 +168,6 @@ namespace MiniUDP
     private bool acceptConnections;
 
     public NetController(
-      INetSocketReader reader,
-      INetSocketWriter writer,
       string version,
       bool acceptConnections)
     {
@@ -162,8 +178,9 @@ namespace MiniUDP
       this.eventPool = new NetPool<NetEvent>();
       this.peers = new Dictionary<IPEndPoint, NetPeer>();
       this.timer = new Stopwatch();
-      this.sender = new NetSender(writer);
-      this.reader = reader;
+      this.socket = new NetSocket();
+      this.sender = new NetSender(this.socket);
+      this.receiver = new NetReceiver(this.socket);
 
       this.reusableQueue = new Queue<NetEvent>();
       this.reusableList = new List<NetPeer>();
@@ -235,6 +252,10 @@ namespace MiniUDP
           }
         }
       }
+
+#if DEBUG
+      this.sender.Update();
+#endif
     }
 
     /// <summary>
@@ -377,11 +398,11 @@ namespace MiniUDP
         byte[] buffer;
         int length;
         SocketError result = 
-          this.reader.TryReceive(out source, out buffer, out length);
+          this.receiver.TryReceive(out source, out buffer, out length);
         if (NetSocket.Succeeded(result) == false)
           return;
 
-        NetPacketType type = NetIO.GetType(buffer);
+        NetPacketType type = NetEncoding.GetType(buffer);
         if (type == NetPacketType.Connect)
         {
           // We don't have a peer yet -- special case
@@ -439,7 +460,7 @@ namespace MiniUDP
     {
       string version;
       string token;
-      NetIO.ReadConnectRequest(
+      NetEncoding.ReadConnectRequest(
         buffer,
         out version,
         out token);
@@ -491,7 +512,7 @@ namespace MiniUDP
 
       byte reason;
       byte unused2;
-      NetIO.ReadProtocolHeader(buffer, out reason, out unused2);
+      NetEncoding.ReadProtocolHeader(buffer, out reason, out unused2);
 
       this.eventOut.Enqueue(
         this.CreateEvent(NetEventType.ConnectRejected, peer, reason));
@@ -514,7 +535,10 @@ namespace MiniUDP
       {
         byte internalReason;
         byte userReason;
-        NetIO.ReadProtocolHeader(buffer, out internalReason, out userReason);
+        NetEncoding.ReadProtocolHeader(
+          buffer, 
+          out internalReason, 
+          out userReason);
 
         int reason = NetEvent.PackReason(internalReason, userReason);
         this.eventOut.Enqueue(
@@ -541,10 +565,10 @@ namespace MiniUDP
       byte pingSeq;
       byte loss;
       int headerSize = 
-        NetIO.ReadProtocolHeader(buffer, out pingSeq, out loss);
+        NetEncoding.ReadProtocolHeader(buffer, out pingSeq, out loss);
 
       peer.OnReceivePing(this.Time, loss);
-      this.sender.SendPong(peer, pingSeq);
+      this.sender.SendPong(peer, pingSeq, peer.GenerateDrop());
     }
 
     private void HandlePong(
@@ -556,11 +580,11 @@ namespace MiniUDP
         return;
 
       byte pongSeq;
-      byte unused2;
+      byte drop;
       int headerSize = 
-        NetIO.ReadProtocolHeader(buffer, out pongSeq, out unused2);
+        NetEncoding.ReadProtocolHeader(buffer, out pongSeq, out drop);
 
-      peer.OnReceivePong(this.Time, pongSeq);
+      peer.OnReceivePong(this.Time, pongSeq, drop);
     }
 
     private void HandleCarrier(
@@ -574,14 +598,14 @@ namespace MiniUDP
       ushort notificationAck;
       ushort notificationSeq;
       int headerSize = 
-        NetIO.ReadCarrierHeader(
+        NetEncoding.ReadCarrierHeader(
           buffer,
           out notificationAck,
           out notificationSeq);
 
       this.reusableQueue.Clear();
       bool success = 
-        NetIO.ReadNotifications(
+        NetEncoding.ReadNotifications(
           peer, 
           buffer, 
           headerSize, 
@@ -610,7 +634,7 @@ namespace MiniUDP
         return;
 
       ushort payloadSeq;
-      int position = NetIO.ReadPayloadHeader(
+      int position = NetEncoding.ReadPayloadHeader(
         buffer,
         out payloadSeq);
 

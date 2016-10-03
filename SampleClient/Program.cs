@@ -42,6 +42,15 @@ class Program
         }
       }
     }
+    //System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
+    //MiniUDP.Util.Noise noise = new MiniUDP.Util.Noise();
+
+    //watch.Start();
+    //while(true)
+    //{
+    //  Console.WriteLine(noise.GetValue(watch.ElapsedMilliseconds));
+    //  System.Threading.Thread.Sleep(1);
+    //}
   }
 
   private static void SendNotification()

@@ -93,7 +93,7 @@ namespace MiniUDP
         this.ClosedByUser = true;
         this.Disconnected();
         if (userReason != NetConfig.DONT_NOTIFY_PEER)
-          this.core.NotifyPeerClosed(this, userReason);
+          this.core.SendKick(this, userReason);
       }
     }
 
@@ -292,11 +292,19 @@ namespace MiniUDP
     }
 
     /// <summary>
-    /// Produces statistics for carrier packets.
+    /// Returns the statistics on lost packets.
     /// </summary>
     internal byte GenerateLoss()
     {
       return this.traffic.GenerateLoss();
+    }
+
+    /// <summary>
+    /// Returns the statistics on dropped packets.
+    /// </summary>
+    internal byte GenerateDrop()
+    {
+      return this.traffic.GenerateDrop();
     }
 
     /// <summary>
@@ -310,9 +318,9 @@ namespace MiniUDP
     /// <summary>
     /// Processes statistics received from pong packets.
     /// </summary>
-    internal void OnReceivePong(long curTime, byte pongSeq)
+    internal void OnReceivePong(long curTime, byte pongSeq, byte drop)
     {
-      this.traffic.OnReceivePong(curTime, pongSeq);
+      this.traffic.OnReceivePong(curTime, pongSeq, drop);
     }
 
     /// <summary>
