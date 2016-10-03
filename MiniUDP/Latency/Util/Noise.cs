@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if DEBUG
+using System;
 using System.Linq;
 
 namespace MiniUDP.Util
@@ -57,3 +58,4 @@ namespace MiniUDP.Util
     }
   }
 }
+#endif

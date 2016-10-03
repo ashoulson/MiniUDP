@@ -226,6 +226,10 @@ namespace MiniUDP
     /// </summary>
     private void Update()
     {
+#if DEBUG
+      this.receiver.Update();
+#endif
+
       this.ReadPackets();
       this.ReadNotifications();
       this.ReadConnectRequests();

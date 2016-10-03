@@ -83,7 +83,7 @@ namespace MiniUDP
 
 #if DEBUG
     #region Latency Simulation
-    public static bool LatencySimulation = true;
+    public static bool LatencySimulation = false;
     public static int MinimumLatency = 120;
     public static int MaximumLatency = 220;
     public static float LatencyTurbulence = 0.5f;

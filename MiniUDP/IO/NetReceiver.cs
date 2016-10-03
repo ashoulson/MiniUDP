@@ -36,6 +36,10 @@ namespace MiniUDP
     {
       this.socket = socket;
       this.receiveBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
+
+#if DEBUG
+      this.inQueue = new NetDelayQueue();
+#endif
     }
 
     public SocketError TryReceive(
@@ -43,6 +47,15 @@ namespace MiniUDP
       out byte[] buffer,
       out int length)
     {
+#if DEBUG
+      if (NetConfig.LatencySimulation)
+      {
+        if (this.inQueue.TryDequeue(out source, out buffer, out length))
+          return SocketError.Success;
+        return SocketError.NoData;
+      }
+#endif
+
       buffer = this.receiveBuffer;
       return
         this.socket.TryReceive(
@@ -50,5 +63,35 @@ namespace MiniUDP
           this.receiveBuffer,
           out length);
     }
+
+    #region Latency Simulation
+#if DEBUG
+    private readonly NetDelayQueue inQueue;
+
+    internal void Update()
+    {
+      if (NetConfig.LatencySimulation)
+      {
+        for (int i = 0; i < NetConfig.MAX_PACKET_READS; i++)
+        {
+          IPEndPoint source;
+          int length;
+          SocketError result =
+            this.socket.TryReceive(
+              out source, 
+              this.receiveBuffer, 
+              out length);
+          if (NetSocket.Succeeded(result) == false)
+            return;
+          this.inQueue.Enqueue(source, this.receiveBuffer, length);
+        }
+      }
+      else
+      {
+        this.inQueue.Clear();
+      }
+    }
+#endif
+    #endregion
   }
 }

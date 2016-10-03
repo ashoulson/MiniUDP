@@ -40,7 +40,7 @@
     <Compile Include="IO\NetEncoding.cs" />
     <Compile Include="IO\NetReceiver.cs" />
     <Compile Include="IO\NetSender.cs" />
-    <Compile Include="Latency\NetLossyQueue.cs" />
+    <Compile Include="Latency\NetDelayQueue.cs" />
     <Compile Include="Latency\Util\Heap.cs" />
     <Compile Include="Latency\Util\Noise.cs" />
     <Compile Include="NetUtil.cs" />
