@@ -238,7 +238,7 @@ namespace MiniUDP
     internal bool QueueNotification(NetEvent data)
     {
       int notificationCount = this.outgoing.Count;
-      if (notificationCount >= NetConfig.MAX_PENDING_NOTIFICATIONS)
+      if (notificationCount >= NetConfig.MaxPendingNotifications)
       {
         NetDebug.LogError("Notification queue full");
         return false;
