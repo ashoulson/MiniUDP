@@ -14,7 +14,8 @@ Supported Networking Tasks:
 - UDP traffic I/O for byte[] arrays with very little overhead
 - Connection establishment and time-out detection
 - Reliable-ordered and unreliable-sequenced message channels
-- Traffic statistic collection for ping, remote packet loss, and local packet loss
+- Traffic statistic collection for ping, remote/local packet loss, and remote/local packet drop
+- Noise-based bidirectional latency and loss simulation with configurable parameters
 
 Three delivery modes:
 - **Connection Token:** A custom string attached with an opening connection request. Will be delivered to the host when the connection is established and made available via an event. Intended for session token authorization.
