@@ -24,7 +24,6 @@ Three delivery modes:
 
 Wishlist:
 - Encryption and authentication
-- Latency and loss simulation
 
 Not Supported:
 - Fragmentation/reassembly (MiniUDP enforces a hard MTU for its payload size)
