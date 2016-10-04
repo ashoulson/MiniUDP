@@ -19,7 +19,6 @@
 */
 
 using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 
@@ -41,7 +40,7 @@ namespace MiniUDP
       this.socket = socket;
 
 #if DEBUG
-      this.outQueue = new NetDelayQueue();
+      this.outQueue = new NetDelay();
 #endif
     }
 
@@ -220,7 +219,7 @@ namespace MiniUDP
 
     #region Latency Simulation
 #if DEBUG
-    private readonly NetDelayQueue outQueue;
+    private readonly NetDelay outQueue;
 
     internal void Update()
     {

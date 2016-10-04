@@ -75,52 +75,44 @@ namespace MiniUDP
 
   public class NetConfig
   {
-    #region Configurable
+    #region Timing
     public static int ShortTickRate = 250;
     public static int LongTickRate = 1000;
     public static int SleepTime = 1;
+    public static long ConnectionTimeOut = 15000;
+    #endregion
+
+    #region Counts
+    public static int MaxPendingNotifications = 100;
+    public static int MaxPacketReads = 50;
     #endregion
 
 #if DEBUG
     #region Latency Simulation
+    // Note that these are applied twice, both incoming and outgoing
     public static bool LatencySimulation = false;
-    public static int MinimumLatency = 120;
-    public static int MaximumLatency = 220;
+    public static int MinimumLatency = 80;
+    public static int MaximumLatency = 120;
     public static float LatencyTurbulence = 0.5f;
     public static float LossChance = 0.10f;
     public static float LossTurbulence = 2.0f;
     #endregion
 #endif
 
-    #region Socket Config
-    internal const int SOCKET_BUFFER_SIZE = 2048;
-    #endregion
+    #region Constant Values
+    /// <summary>
+    /// Size of the window used for smoothing ping averages.
+    /// </summary>
+    public const int PING_SMOOTHING_WINDOW = 5;
 
     #region Packet
+    internal const int SOCKET_BUFFER_SIZE = 2048;
     public const int MAX_DATA_SIZE = 1200;
     public const int MAX_NOTIFICATION_PACK = MAX_DATA_SIZE + NetEvent.HEADER_SIZE;
     public const int MAX_VERSION_BYTES = (1 << (8 * sizeof(byte))) - 1;
     public const int MAX_TOKEN_BYTES = (1 << (8 * sizeof(byte))) - 1;
     #endregion
 
-    #region Timing
-    /// <summary>
-    /// How long to wait before disconnecting a quiet peer.
-    /// </summary>
-    public const long CONNECTION_TIME_OUT = 15000;
-
-    /// <summary>
-    /// Size of the window used for smoothing ping averages.
-    /// </summary>
-    public const int PING_SMOOTHING_WINDOW = 5;
-    #endregion
-
-    #region Counts
-    public const int MAX_PENDING_NOTIFICATIONS = 100;
-    public const int MAX_PACKET_READS = 50;
-    #endregion
-
-    #region Misc
     internal const byte DONT_NOTIFY_PEER = 0;
     internal const byte DEFAULT_USER_REASON = 255;
     #endregion

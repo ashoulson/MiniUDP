@@ -21,6 +21,7 @@
 using System;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 
 namespace MiniUDP
@@ -38,6 +39,9 @@ namespace MiniUDP
     {
       if (version == null)
         version = "";
+      if (Encoding.UTF8.GetByteCount(version) > NetConfig.MAX_VERSION_BYTES)
+        throw new ApplicationException("Version string too long");
+
       this.controller = new NetController(version, allowConnections);
     }
 
@@ -66,6 +70,9 @@ namespace MiniUDP
     {
       if (token == null)
         token = "";
+      if (Encoding.UTF8.GetByteCount(token) > NetConfig.MAX_TOKEN_BYTES)
+        throw new ApplicationException("Token string too long");
+
       NetPeer pending = this.controller.BeginConnect(endpoint, token);
       pending.Expose(this);
       return pending;

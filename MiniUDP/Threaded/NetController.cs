@@ -167,7 +167,7 @@ namespace MiniUDP
     private bool isRunning;
     private bool acceptConnections;
 
-    public NetController(
+    internal NetController(
       string version,
       bool acceptConnections)
     {
@@ -192,8 +192,6 @@ namespace MiniUDP
       this.acceptConnections = acceptConnections;
 
       this.version = version;
-      if (Encoding.UTF8.GetByteCount(version) > NetConfig.MAX_VERSION_BYTES)
-        throw new ApplicationException("Version string too long");
     }
 
     /// <summary>
@@ -317,7 +315,7 @@ namespace MiniUDP
     /// </summary>
     private void UpdateConnecting(NetPeer peer)
     {
-      if (peer.GetTimeSinceRecv(this.Time) > NetConfig.CONNECTION_TIME_OUT)
+      if (peer.GetTimeSinceRecv(this.Time) > NetConfig.ConnectionTimeOut)
       {
         this.ClosePeer(peer, NetKickReason.Timeout);
         this.eventOut.Enqueue(
@@ -333,7 +331,7 @@ namespace MiniUDP
     /// </summary>
     private void UpdateConnected(NetPeer peer, bool longTick)
     {
-      if (peer.GetTimeSinceRecv(this.Time) > NetConfig.CONNECTION_TIME_OUT)
+      if (peer.GetTimeSinceRecv(this.Time) > NetConfig.ConnectionTimeOut)
       {
         this.ClosePeer(peer, NetKickReason.Timeout);
         this.eventOut.Enqueue(
@@ -396,7 +394,7 @@ namespace MiniUDP
     /// </summary>
     private void ReadPackets()
     {
-      for (int i = 0; i < NetConfig.MAX_PACKET_READS; i++)
+      for (int i = 0; i < NetConfig.MaxPacketReads; i++)
       {
         IPEndPoint source;
         byte[] buffer;

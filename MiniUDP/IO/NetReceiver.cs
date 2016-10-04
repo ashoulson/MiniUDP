@@ -38,7 +38,7 @@ namespace MiniUDP
       this.receiveBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
 
 #if DEBUG
-      this.inQueue = new NetDelayQueue();
+      this.inQueue = new NetDelay();
 #endif
     }
 
@@ -66,13 +66,13 @@ namespace MiniUDP
 
     #region Latency Simulation
 #if DEBUG
-    private readonly NetDelayQueue inQueue;
+    private readonly NetDelay inQueue;
 
     internal void Update()
     {
       if (NetConfig.LatencySimulation)
       {
-        for (int i = 0; i < NetConfig.MAX_PACKET_READS; i++)
+        for (int i = 0; i < NetConfig.MaxPacketReads; i++)
         {
           IPEndPoint source;
           int length;

@@ -14,7 +14,7 @@ class Program
   static void Main(string[] args)
   {
     NetConfig.LatencySimulation = true;
-    Connector client = new Connector("Sample1.0", false);
+    Connector client = new Connector("Sample1.1", false);
 
     Clock fastClock = new Clock(0.02f);
     Clock slowClock = new Clock(1.0f);
@@ -43,15 +43,6 @@ class Program
         }
       }
     }
-    //System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
-    //MiniUDP.Util.Noise noise = new MiniUDP.Util.Noise();
-
-    //watch.Start();
-    //while(true)
-    //{
-    //  Console.WriteLine(noise.GetValue(watch.ElapsedMilliseconds));
-    //  System.Threading.Thread.Sleep(1);
-    //}
   }
 
   private static void SendNotification()
