@@ -15,23 +15,23 @@ namespace Tests
     [TestMethod]
     public void TestLossCounter()
     {
-      NetTraffic.LossCounter counter;
+      NetTraffic.SequenceCounter counter;
       
-      counter = new NetTraffic.LossCounter();
-      Assert.AreEqual(0, counter.ComputeLostAmount());
+      counter = new NetTraffic.SequenceCounter();
+      Assert.AreEqual(0, NetTraffic.LOSS_BITS - counter.ComputeCount());
 
-      counter.LogSequence(1);
-      Assert.AreEqual(0, counter.ComputeLostAmount());
+      counter.Store(1);
+      Assert.AreEqual(0, NetTraffic.LOSS_BITS - counter.ComputeCount());
 
-      counter.LogSequence(3);
-      Assert.AreEqual(1, counter.ComputeLostAmount());
+      counter.Store(3);
+      Assert.AreEqual(1, NetTraffic.LOSS_BITS - counter.ComputeCount());
 
-      counter.LogSequence(10000);
-      Assert.AreEqual(NetTraffic.LOSS_BITS - 1, counter.ComputeLostAmount());
+      counter.Store(10000);
+      Assert.AreEqual(1, counter.ComputeCount());
 
-      counter = new NetTraffic.LossCounter();
-      counter.LogSequence(95);
-      Assert.AreEqual(94, counter.ComputeLostAmount());
+      counter = new NetTraffic.SequenceCounter();
+      counter.Store(95);
+      Assert.AreEqual(94, NetTraffic.LOSS_BITS - counter.ComputeCount());
     }
 
     [TestMethod]

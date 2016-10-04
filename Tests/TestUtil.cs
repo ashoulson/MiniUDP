@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 
 using MiniUDP;
+using MiniUDP.Util;
 
 namespace Tests
 {
@@ -27,6 +28,27 @@ namespace Tests
       Assert.IsTrue(NetUtil.UShortSeqDiff(32767, 0) > 0);
       Assert.IsTrue(NetUtil.UShortSeqDiff(32768, 0) < 0);
       Assert.IsTrue(NetUtil.UShortSeqDiff(32768, 32768) == 0);
+    }
+
+    [TestMethod]
+    public void TestHeap()
+    {
+      Heap<int> heap = new Heap<int>();
+      heap.Add(6);
+      heap.Add(2);
+      heap.Add(7);
+      heap.Add(1);
+      heap.Add(4);
+      heap.Add(5);
+      heap.Add(3);
+
+      Assert.AreEqual(1, heap.ExtractDominating());
+      Assert.AreEqual(2, heap.ExtractDominating());
+      Assert.AreEqual(3, heap.ExtractDominating());
+      Assert.AreEqual(4, heap.ExtractDominating());
+      Assert.AreEqual(5, heap.ExtractDominating());
+      Assert.AreEqual(6, heap.ExtractDominating());
+      Assert.AreEqual(7, heap.ExtractDominating());
     }
   }
 }

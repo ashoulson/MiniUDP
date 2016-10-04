@@ -28,8 +28,7 @@ namespace MiniUDP
   /// pipeline queues. Also encoded/decoded over the network to pass reliable 
   /// messages to connected peers (called "notifications" in this instance).
   /// </summary>
-  internal class NetEvent
-    : INetPoolable<NetEvent>
+  internal class NetEvent : INetPoolable<NetEvent>
   {
     #region Header
     internal const int HEADER_SIZE = sizeof(ushort); // Byte count
@@ -166,13 +165,13 @@ namespace MiniUDP
 
     private int PackHeader(byte[] destBuf, int position)
     {
-      NetIO.PackU16(destBuf, position, this.length);
+      NetEncoding.PackU16(destBuf, position, this.length);
       return NetEvent.HEADER_SIZE;
     }
 
     private int ReadHeader(byte[] sourceBuf, int position, out ushort length)
     {
-      length = NetIO.ReadU16(sourceBuf, position);
+      length = NetEncoding.ReadU16(sourceBuf, position);
       return NetEvent.HEADER_SIZE;
     }
     #endregion

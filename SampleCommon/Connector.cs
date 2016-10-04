@@ -21,8 +21,6 @@
 using System;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
-using System.Collections.Generic;
 
 using MiniUDP;
 
@@ -63,7 +61,12 @@ namespace SampleCommon
     private void Peer_NotificationReceived(NetPeer peer, byte[] data, int dataLength)
     {
       Console.WriteLine(peer.EndPoint + " got notification: \"" + Encoding.UTF8.GetString(data, 0, dataLength) + "\"");
-      Console.WriteLine(peer.Traffic.Ping + "ms " + (peer.Traffic.LocalLoss * 100.0f) + "% " + (peer.Traffic.RemoteLoss * 100.0f) + "%");
+      Console.WriteLine(
+        peer.Traffic.Ping + "ms " + 
+        (peer.Traffic.LocalLoss * 100.0f) + "% " + 
+        (peer.Traffic.RemoteLoss * 100.0f) + "% " +
+        (peer.Traffic.LocalDrop * 100.0f) + "% " +
+        (peer.Traffic.RemoteDrop * 100.0f) + "%");
     }
 
     private void Peer_PeerClosedTimeout(NetPeer peer)
@@ -102,6 +105,15 @@ namespace SampleCommon
       host.ConnectTimedOut += Host_ConnectTimedOut;
       host.ConnectAccepted += Host_ConnectAccepted;
       host.ConnectRejected += Host_ConnectRejected;
+
+      // TODO: This is really inconvenient. Consolidate some of these,
+      // especially the Connect/ConnectAccepted events
+      host.PeerClosedError += Peer_PeerClosedError;
+      host.PeerClosedTimeout += Peer_PeerClosedTimeout;
+      host.PeerClosedShutdown += Peer_PeerClosedShutdown;
+      host.PeerClosedKicked += Peer_PeerClosedKicked;
+      host.PayloadReceived += Peer_PayloadReceived;
+      host.NotificationReceived += Peer_NotificationReceived;
 
       return host;
     }

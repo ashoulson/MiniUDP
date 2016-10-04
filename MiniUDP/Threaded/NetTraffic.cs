@@ -27,63 +27,72 @@ namespace MiniUDP
   /// </summary>
   public class NetTraffic
   {
-    internal const int LOSS_BITS = 256;
+    internal const int LOSS_BITS = 224;
     internal const int PING_HISTORY = 64;
 
     /// <summary>
     /// Sliding bit array keeping a history of received sequence numbers.
     /// </summary>
-    internal class LossCounter
+    internal class SequenceCounter
     {
       private readonly int numChunks;
       internal readonly uint[] data;
 
       private ushort latestSequence;
 
-      public LossCounter()
+      public SequenceCounter(bool startFilled = true)
       {
         this.numChunks = NetTraffic.LOSS_BITS / 32;
         this.data = new uint[this.numChunks];
         this.latestSequence = 0;
-        for (int i = 0; i < this.data.Length; i++)
-          this.data[i] = 0xFFFFFFFF;
+
+        if (startFilled)
+          for (int i = 0; i < this.data.Length; i++)
+            this.data[i] = 0xFFFFFFFF;
       }
 
-      public int ComputeLostAmount()
+      public int ComputeCount()
       {
         uint sum = 0;
         for (int i = 0; i < this.numChunks; i++)
           sum += this.HammingWeight(this.data[i]);
-        return NetTraffic.LOSS_BITS - (int)sum;
+        return (int)sum;
       }
 
       /// <summary>
       /// Logs the sequence in the accumulator.
-      /// Returns true if this is a new sequence.
       /// </summary>
-      public bool LogSequence(ushort sequence)
+      public void Store(ushort sequence)
       {
         int difference =
           NetUtil.UShortSeqDiff(this.latestSequence, sequence);
 
         if (difference == 0)
-          return false;
+          return;
         if (difference >= NetTraffic.LOSS_BITS)
-          return false;
-
+          return;
         if (difference > 0)
         {
-          // Don't set the bit retroactively since we'll be 
-          // rejecting the payload. It counts as lost in this case.
-          //this.SetBit(difference);
-          return false;
+          this.SetBit(difference);
+          return;
         }
-        else
+
+        this.Shift(-difference);
+        this.latestSequence = sequence;
+        this.data[0] |= 1;
+      }
+
+      /// <summary>
+      /// Advances to a given sequence without storing anything.
+      /// </summary>
+      public void Advance(ushort sequence)
+      {
+        int difference =
+          NetUtil.UShortSeqDiff(this.latestSequence, sequence);
+        if (difference < 0)
         {
           this.Shift(-difference);
           this.latestSequence = sequence;
-          this.data[0] |= 1;
-          return true;
         }
       }
 
@@ -221,6 +230,8 @@ namespace MiniUDP
     public float Ping { get; private set; }
     public float LocalLoss { get; private set; }
     public float RemoteLoss { get; private set; }
+    public float LocalDrop { get; private set; }
+    public float RemoteDrop { get; private set; }
     public long TimeSinceCreation { get; private set; }
     public long TimeSinceReceive { get; private set; }
     public long TimeSincePayload { get; private set; }
@@ -229,15 +240,16 @@ namespace MiniUDP
 
     internal ushort NotificationAck { get { return this.notificationAck; } }
 
-    private readonly LossCounter payloadLoss;
+    private readonly SequenceCounter payloadLoss;
+    private readonly SequenceCounter payloadDrop;
     private readonly PingCounter outgoingPing;
     private readonly int[] pingWindow;
     private readonly long creationTime;
 
+    private ushort lastPayloadSeq;
     private ushort notificationAck;
     private int pingWindowIndex;
 
-    private byte lastRecvLoss;
     private long lastPacketRecvTime; // Time we last received anything
     private long lastPayloadRecvTime;
     private long lastNotificationRecvTime;
@@ -245,14 +257,15 @@ namespace MiniUDP
 
     internal NetTraffic(long creationTime)
     {
-      this.payloadLoss = new LossCounter();
+      this.payloadLoss = new SequenceCounter(true);
+      this.payloadDrop = new SequenceCounter(false);
       this.outgoingPing = new PingCounter();
       this.pingWindow = new int[NetConfig.PING_SMOOTHING_WINDOW];
       this.creationTime = creationTime;
 
+      this.lastPayloadSeq = ushort.MaxValue; // "-1"
       this.notificationAck = 0;
       this.pingWindowIndex = 0;
-      this.lastRecvLoss = 0;
 
       this.lastPacketRecvTime = creationTime;
       this.lastPayloadRecvTime = creationTime;
@@ -291,7 +304,14 @@ namespace MiniUDP
 
     internal byte GenerateLoss()
     {
-      return (byte)(this.payloadLoss.ComputeLostAmount());
+      int count = this.payloadLoss.ComputeCount();
+      int missing = NetTraffic.LOSS_BITS - count;
+      return (byte)missing;
+    }
+
+    internal byte GenerateDrop()
+    {
+      return (byte)this.payloadDrop.ComputeCount();
     }
 
     /// <summary>
@@ -300,16 +320,15 @@ namespace MiniUDP
     internal void OnReceivePing(long curTime, byte loss)
     {
       this.lastPacketRecvTime = curTime;
-      this.lastRecvLoss = loss;
 
       // Recompute since it may be read on the main thread
-      this.RemoteLoss = this.lastRecvLoss / (float)NetTraffic.LOSS_BITS;
+      this.RemoteLoss = loss / (float)NetTraffic.LOSS_BITS;
     }
 
     /// <summary>
     /// Receives a pong and updates connection timings.
     /// </summary>
-    internal void OnReceivePong(long curTime, byte pongSeq)
+    internal void OnReceivePong(long curTime, byte pongSeq, byte drop)
     {
       // Reject it if it's too old, including statistics for it
       long creationTime = this.outgoingPing.ConsumePong(pongSeq);
@@ -328,6 +347,7 @@ namespace MiniUDP
 
       // Recompute since it may be read on the main thread
       this.Ping = NetTraffic.PingAverage(this.pingWindow);
+      this.RemoteDrop = drop / (float)NetTraffic.LOSS_BITS;
     }
 
     /// <summary>
@@ -336,17 +356,25 @@ namespace MiniUDP
     /// </summary>
     internal bool OnReceivePayload(long curTime, ushort payloadSeq)
     {
-      // Reject it if it's too old, including statistics for it
-      if (this.payloadLoss.LogSequence(payloadSeq) == false)
-        return false;
+      bool isNew = this.IsPayloadNew(payloadSeq);
+      this.payloadLoss.Store(payloadSeq);
 
-      this.lastPacketRecvTime = curTime;
-      this.lastPayloadRecvTime = curTime;
+      if (isNew)
+      {
+        this.lastPacketRecvTime = curTime;
+        this.lastPayloadRecvTime = curTime;
+        this.lastPayloadSeq = payloadSeq;
+        this.payloadDrop.Advance(payloadSeq);
+      }
+      else
+      {
+        this.payloadDrop.Store(payloadSeq);
+      }
 
       // Recompute since it may be read on the main thread
-      this.LocalLoss = 
-        this.payloadLoss.ComputeLostAmount() / (float)NetTraffic.LOSS_BITS;
-      return true;
+      this.LocalLoss = this.GenerateLoss() / (float)NetTraffic.LOSS_BITS;
+      this.LocalDrop = this.GenerateDrop() / (float)NetTraffic.LOSS_BITS;
+      return isNew;
     }
 
     /// <summary>
@@ -371,6 +399,16 @@ namespace MiniUDP
     internal void OnReceiveOther(long curTime)
     {
       this.lastPacketRecvTime = curTime;
+    }
+
+    /// <summary>
+    /// Returns true iff a payload sequence is new.
+    /// </summary>
+    private bool IsPayloadNew(ushort sequence)
+    {
+      int difference =
+        NetUtil.UShortSeqDiff(this.lastPayloadSeq, sequence);
+      return (difference < 0);
     }
   }
 }

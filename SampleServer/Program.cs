@@ -7,7 +7,7 @@ class Program
 {
   static void Main(string[] args)
   {
-    Connector server = new Connector("Sample1.0", true);
+    Connector server = new Connector("Sample1.1", true);
 
     server.Host(42324);
 
