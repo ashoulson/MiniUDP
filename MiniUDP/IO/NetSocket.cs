@@ -23,73 +23,12 @@ using System.Net.Sockets;
 
 namespace MiniUDP
 {
-  public delegate void SocketFailed(SocketException exception);
-
-  internal interface INetSocketReader
-  {
-    SocketError TryReceive(
-      out IPEndPoint source,
-      out byte[] buffer,
-      out int length);
-  }
-
-  internal interface INetSocketWriter
-  {
-    SocketError TrySend(
-      IPEndPoint destination,
-      byte[] buffer,
-      int length);
-  }
-
   /// <summary>
   /// Since raw sockets are thread safe, we use a global socket singleton
   /// between the two threads for the sake of convenience.
   /// </summary>
   internal class NetSocket
   {
-    private class Reader : INetSocketReader
-    {
-      private readonly NetSocket socket;
-      private readonly byte[] receiveBuffer;
-
-      internal Reader(NetSocket socket)
-      {
-        this.socket = socket;
-        this.receiveBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
-      }
-
-      public SocketError TryReceive(
-        out IPEndPoint source,
-        out byte[] buffer,
-        out int length)
-      {
-        buffer = this.receiveBuffer;
-        return
-          this.socket.TryReceive(
-            out source, 
-            this.receiveBuffer, 
-            out length);
-      }
-    }
-
-    private class Writer : INetSocketWriter
-    {
-      private readonly NetSocket socket;
-
-      internal Writer(NetSocket socket)
-      {
-        this.socket = socket;
-      }
-
-      public SocketError TrySend(
-        IPEndPoint destination,
-        byte[] buffer,
-        int length)
-      {
-        return this.socket.TrySend(destination, buffer, length);
-      }
-    }
-
     public static bool Succeeded(SocketError error)
     {
       return (error == SocketError.Success);
@@ -139,16 +78,6 @@ namespace MiniUDP
       }
     }
 
-    internal INetSocketReader CreateReader()
-    {
-      return new Reader(this);
-    }
-
-    internal INetSocketWriter CreateWriter()
-    {
-      return new Writer(this);
-    }
-
     internal SocketError Bind(int port)
     {
       try
@@ -171,7 +100,7 @@ namespace MiniUDP
     /// Attempts to send data to endpoint via OS socket. 
     /// Returns false if the send failed.
     /// </summary>
-    private SocketError TrySend(
+    internal SocketError TrySend(
       IPEndPoint destination,
       byte[] buffer,
       int length)
@@ -200,7 +129,7 @@ namespace MiniUDP
     /// Attempts to read from OS socket. Returns false if the read fails
     /// or if there is nothing to read.
     /// </summary>
-    private SocketError TryReceive(
+    internal SocketError TryReceive(
       out IPEndPoint source,
       byte[] destBuffer,
       out int length)

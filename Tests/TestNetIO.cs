@@ -46,10 +46,10 @@ namespace Tests
       // The buffer should fit this notification exactly.
       srcQueue.Clear();
       srcQueue.Enqueue(evnt1);
-      headerSize = NetIO.PackCarrierHeader(buffer, 0, 0);
-      packedSize = NetIO.PackNotifications(buffer, headerSize, srcQueue);
+      headerSize = NetEncoding.PackCarrierHeader(buffer, 0, 0);
+      packedSize = NetEncoding.PackNotifications(buffer, headerSize, srcQueue);
       dstQueue.Clear();
-      NetIO.ReadNotifications(null, buffer, headerSize, headerSize + packedSize, TestNetIO.CreateEvent, dstQueue);
+      NetEncoding.ReadNotifications(null, buffer, headerSize, headerSize + packedSize, TestNetIO.CreateEvent, dstQueue);
       Assert.AreEqual(1, dstQueue.Count);
       Assert.AreEqual(NetConfig.MAX_NOTIFICATION_PACK, packedSize);
 
@@ -57,10 +57,10 @@ namespace Tests
       srcQueue.Clear();
       srcQueue.Enqueue(evnt2);
       srcQueue.Enqueue(evnt3);
-      headerSize = NetIO.PackCarrierHeader(buffer, 0, 0);
-      packedSize = NetIO.PackNotifications(buffer, headerSize, srcQueue);
+      headerSize = NetEncoding.PackCarrierHeader(buffer, 0, 0);
+      packedSize = NetEncoding.PackNotifications(buffer, headerSize, srcQueue);
       dstQueue.Clear();
-      NetIO.ReadNotifications(null, buffer, headerSize, headerSize + packedSize, TestNetIO.CreateEvent, dstQueue);
+      NetEncoding.ReadNotifications(null, buffer, headerSize, headerSize + packedSize, TestNetIO.CreateEvent, dstQueue);
       Assert.AreEqual(2, dstQueue.Count);
       Assert.AreEqual(NetConfig.MAX_NOTIFICATION_PACK, packedSize);
 
@@ -68,19 +68,19 @@ namespace Tests
       srcQueue.Clear();
       srcQueue.Enqueue(evnt3);
       srcQueue.Enqueue(evnt4);
-      headerSize = NetIO.PackCarrierHeader(buffer, 0, 0);
-      packedSize = NetIO.PackNotifications(buffer, headerSize, srcQueue);
+      headerSize = NetEncoding.PackCarrierHeader(buffer, 0, 0);
+      packedSize = NetEncoding.PackNotifications(buffer, headerSize, srcQueue);
       dstQueue.Clear();
-      NetIO.ReadNotifications(null, buffer, headerSize, headerSize + packedSize, TestNetIO.CreateEvent, dstQueue);
+      NetEncoding.ReadNotifications(null, buffer, headerSize, headerSize + packedSize, TestNetIO.CreateEvent, dstQueue);
       Assert.AreEqual(1, dstQueue.Count);
       Assert.AreEqual(halfPack + NetEvent.HEADER_SIZE, packedSize);
 
       // We should pack no bytes and read no notifications for this.
       srcQueue.Clear();
-      headerSize = NetIO.PackCarrierHeader(buffer, 0, 0);
-      packedSize = NetIO.PackNotifications(buffer, headerSize, srcQueue);
+      headerSize = NetEncoding.PackCarrierHeader(buffer, 0, 0);
+      packedSize = NetEncoding.PackNotifications(buffer, headerSize, srcQueue);
       dstQueue.Clear();
-      NetIO.ReadNotifications(null, buffer, headerSize, headerSize + packedSize, TestNetIO.CreateEvent, dstQueue);
+      NetEncoding.ReadNotifications(null, buffer, headerSize, headerSize + packedSize, TestNetIO.CreateEvent, dstQueue);
       Assert.AreEqual(0, dstQueue.Count);
       Assert.AreEqual(0, packedSize);
     }
@@ -113,11 +113,11 @@ namespace Tests
       srcQueue.Enqueue(evnt2);
       srcQueue.Enqueue(evnt3);
 
-      int headerBytes = NetIO.PackCarrierHeader(buffer, 0, 0);
-      int packedSize = NetIO.PackNotifications(buffer, headerBytes, srcQueue);
+      int headerBytes = NetEncoding.PackCarrierHeader(buffer, 0, 0);
+      int packedSize = NetEncoding.PackNotifications(buffer, headerBytes, srcQueue);
       int length = headerBytes + packedSize;
 
-      NetIO.ReadNotifications(null, buffer, headerBytes, length, TestNetIO.CreateEvent, destQueue);
+      NetEncoding.ReadNotifications(null, buffer, headerBytes, length, TestNetIO.CreateEvent, destQueue);
       NetEvent evntA = destQueue.Dequeue();
       NetEvent evntB = destQueue.Dequeue();
       NetEvent evntC = destQueue.Dequeue();
@@ -133,7 +133,7 @@ namespace Tests
       byte[] buffer = new byte[2048];
       int size = 25;
 
-      int headerBytes = NetIO.PackCarrierHeader(buffer, 0, 0);
+      int headerBytes = NetEncoding.PackCarrierHeader(buffer, 0, 0);
       buffer[headerBytes] = (byte)size;
       int length = headerBytes + 1;
 
@@ -141,31 +141,31 @@ namespace Tests
       // the header for the notification size (2 bytes), this should prevent the 
       // notification from being read.
       Queue<NetEvent> destQueue = new Queue<NetEvent>();
-      NetIO.ReadNotifications(null, buffer, headerBytes, length, TestNetIO.CreateEvent, destQueue);
+      NetEncoding.ReadNotifications(null, buffer, headerBytes, length, TestNetIO.CreateEvent, destQueue);
       Assert.AreEqual(0, destQueue.Count);
 
       // Manually configure the size properly to cover the end of the buffer.
       // There should be one notification read.
-      NetIO.PackU16(buffer, headerBytes, (ushort)size);
+      NetEncoding.PackU16(buffer, headerBytes, (ushort)size);
       length = headerBytes + size + NetEvent.HEADER_SIZE;
       destQueue.Clear();
-      NetIO.ReadNotifications(null, buffer, headerBytes, length, TestNetIO.CreateEvent, destQueue);
+      NetEncoding.ReadNotifications(null, buffer, headerBytes, length, TestNetIO.CreateEvent, destQueue);
       Assert.AreEqual(1, destQueue.Count);
 
       // Maliciously set the size to be beyond the buffer by 1 byte. 
       // This should prevent the notification from being read.
-      NetIO.PackU16(buffer, headerBytes, (ushort)(size + 1));
+      NetEncoding.PackU16(buffer, headerBytes, (ushort)(size + 1));
       length = headerBytes + size + NetEvent.HEADER_SIZE;
       destQueue.Clear();
-      NetIO.ReadNotifications(null, buffer, headerBytes, length, TestNetIO.CreateEvent, destQueue);
+      NetEncoding.ReadNotifications(null, buffer, headerBytes, length, TestNetIO.CreateEvent, destQueue);
       Assert.AreEqual(0, destQueue.Count);
 
       // Maliciously set the size to end before the buffer by 1 byte. 
       // This should read the first notification but not cause any other issues.
-      NetIO.PackU16(buffer, headerBytes, (ushort)(size - 1));
+      NetEncoding.PackU16(buffer, headerBytes, (ushort)(size - 1));
       length = headerBytes + size + NetEvent.HEADER_SIZE;
       destQueue.Clear();
-      NetIO.ReadNotifications(null, buffer, headerBytes, length, TestNetIO.CreateEvent, destQueue);
+      NetEncoding.ReadNotifications(null, buffer, headerBytes, length, TestNetIO.CreateEvent, destQueue);
       Assert.AreEqual(1, destQueue.Count);
     }
 
@@ -176,18 +176,18 @@ namespace Tests
 
       ushort sequence = 0xFACD;
       int bytesPacked = 
-        NetIO.PackPayloadHeader(
+        NetEncoding.PackPayloadHeader(
           buffer, 
           sequence);
 
       ushort sequenceRead;
       int bytesRead = 
-        NetIO.ReadPayloadHeader(
+        NetEncoding.ReadPayloadHeader(
           buffer, 
           out sequenceRead);
 
       Assert.AreEqual(0, buffer[bytesPacked]);
-      Assert.AreEqual(NetPacketType.Payload, NetIO.GetType(buffer));
+      Assert.AreEqual(NetPacketType.Payload, NetEncoding.GetType(buffer));
       Assert.AreEqual(bytesPacked, bytesRead);
       Assert.AreEqual(sequence, sequenceRead);
     }
@@ -201,7 +201,7 @@ namespace Tests
       byte firstParam = 0xAF;
       byte secondParam = 0xFA;
       int bytesPacked = 
-        NetIO.PackProtocolHeader(
+        NetEncoding.PackProtocolHeader(
           buffer, 
           type, 
           firstParam, 
@@ -210,13 +210,13 @@ namespace Tests
       byte firstParamRead;
       byte secondParamRead;
       int bytesRead = 
-        NetIO.ReadProtocolHeader(
+        NetEncoding.ReadProtocolHeader(
           buffer, 
           out firstParamRead, 
           out secondParamRead);
 
       Assert.AreEqual(0, buffer[bytesPacked]);
-      Assert.AreEqual(NetPacketType.ConnectReject, NetIO.GetType(buffer));
+      Assert.AreEqual(NetPacketType.ConnectReject, NetEncoding.GetType(buffer));
       Assert.AreEqual(bytesPacked, bytesRead);
       Assert.AreEqual(firstParam, firstParamRead);
       Assert.AreEqual(secondParam, secondParamRead);
@@ -230,7 +230,7 @@ namespace Tests
       ushort messageAck = 0xDCAF;
       ushort messageSeq = 0xFCCE;
       int bytesPacked =
-        NetIO.PackCarrierHeader(
+        NetEncoding.PackCarrierHeader(
           buffer,
           messageAck,
           messageSeq);
@@ -238,13 +238,13 @@ namespace Tests
       ushort notificationAckRead;
       ushort notificationSeqRead;
       int bytesRead =
-        NetIO.ReadCarrierHeader(
+        NetEncoding.ReadCarrierHeader(
           buffer,
           out notificationAckRead,
           out notificationSeqRead);
 
       Assert.AreEqual(0, buffer[bytesPacked]);
-      Assert.AreEqual(NetPacketType.Carrier, NetIO.GetType(buffer));
+      Assert.AreEqual(NetPacketType.Carrier, NetEncoding.GetType(buffer));
       Assert.AreEqual(bytesPacked, bytesPacked);
       Assert.AreEqual(messageAck, notificationAckRead);
       Assert.AreEqual(messageSeq, notificationSeqRead);
