@@ -41,6 +41,11 @@ namespace MiniUDP
 
   public class NetPeer
   {
+    /// <summary>
+    /// User-configurable data to attach to this peer.
+    /// </summary>
+    public object UserData { get; set; }
+
     // Data Receipt
     public event NetDataEvent PayloadReceived;
     public event NetDataEvent NotificationReceived;
@@ -74,7 +79,6 @@ namespace MiniUDP
     #region Main Thread
     // This region should only be accessed by the MAIN thread
 
-    public object UserData { get; set; }
     public IPEndPoint EndPoint { get { return this.endPoint; } }
     internal bool ClosedByUser { get; private set; }
 
