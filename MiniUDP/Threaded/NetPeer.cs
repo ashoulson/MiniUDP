@@ -32,11 +32,6 @@ namespace MiniUDP
     Closed,
   }
 
-  public delegate void NetPeerEvent(NetPeer peer);
-  public delegate void NetPeerErrorEvent(NetPeer peer, SocketError error);
-  public delegate void NetPeerClosedEvent(NetPeer peer, NetKickReason reason, byte userReason);
-  public delegate void NetPeerRejectEvent(NetPeer peer, NetRejectReason reason);
-
   public delegate void NetDataEvent(NetPeer peer, byte[] data, int dataLength);
 
   public class NetPeer
@@ -50,16 +45,9 @@ namespace MiniUDP
     public event NetDataEvent PayloadReceived;
     public event NetDataEvent NotificationReceived;
 
-    // Remote peer activity
-    public event NetPeerErrorEvent PeerClosedError;
-    public event NetPeerEvent PeerClosedTimeout;
-    public event NetPeerEvent PeerClosedShutdown;
-    public event NetPeerClosedEvent PeerClosedKicked;
-
-    // Responses to connection attempts
-    public event NetPeerEvent ConnectTimedOut;
-    public event NetPeerConnectEvent ConnectAccepted;
-    public event NetPeerRejectEvent ConnectRejected;
+    // Peer activity
+    public event NetPeerConnectEvent PeerConnected;
+    public event NetPeerCloseEvent PeerClosed;
 
     public bool IsConnected { get { return this.status == NetPeerStatus.Connected; } }
     public bool IsOpen { get { return this.status != NetPeerStatus.Closed; } }
@@ -135,6 +123,11 @@ namespace MiniUDP
       return true;
     }
 
+    internal void SetCore(NetCore core)
+    {
+      this.core = core;
+    }
+
     #region Events
     internal void OnPayloadReceived(byte[] data, int dataLength)
     {
@@ -146,39 +139,14 @@ namespace MiniUDP
       this.NotificationReceived?.Invoke(this, data, dataLength);
     }
 
-    internal void OnPeerClosedError(SocketError error)
+    internal void OnPeerConnected()
     {
-      this.PeerClosedError?.Invoke(this, error);
+      this.PeerConnected?.Invoke(this, this.token);
     }
 
-    internal void OnPeerClosedTimeout()
+    internal void OnPeerClosed(NetCloseReason reason, byte userKickReason, SocketError error)
     {
-      this.PeerClosedTimeout?.Invoke(this);
-    }
-
-    internal void OnPeerClosedShutdown()
-    {
-      this.PeerClosedShutdown?.Invoke(this);
-    }
-
-    internal void OnPeerClosedKicked(NetKickReason reason, byte userReason)
-    {
-      this.PeerClosedKicked?.Invoke(this, reason, userReason);
-    }
-
-    internal void OnConnectTimedOut()
-    {
-      this.ConnectTimedOut?.Invoke(this);
-    }
-
-    internal void OnConnectAccepted()
-    {
-      this.ConnectAccepted?.Invoke(this, this.token);
-    }
-
-    internal void OnConnectRejected(NetRejectReason reason)
-    {
-      this.ConnectRejected?.Invoke(this, reason);
+      this.PeerClosed?.Invoke(this, reason, userKickReason, error);
     }
     #endregion
 
@@ -248,7 +216,7 @@ namespace MiniUDP
         return false;
       }
 
-      data.SetSequence(this.notificationSeq++);
+      data.Sequence = this.notificationSeq++;
       this.outgoing.Enqueue(data);
       return true;
     }
@@ -259,14 +227,6 @@ namespace MiniUDP
     internal void Connected()
     {
       this.status = NetPeerStatus.Connected;
-    }
-
-    /// <summary>
-    /// Assigns this peer to a main-thread core for functionality.
-    /// </summary>
-    internal void Expose(NetCore core)
-    {
-      this.core = core;
     }
 
     /// <summary>

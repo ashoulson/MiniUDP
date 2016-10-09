@@ -26,6 +26,33 @@ namespace MiniUDP
   public static class NetUtil
   {
     /// <summary>
+    /// Validates that a given kick reason is acceptable for a remote kick.
+    /// </summary>
+    internal static NetCloseReason ValidateKickReason(NetCloseReason reason)
+    {
+      switch (reason)
+      {
+        case NetCloseReason.RejectNotHost:
+          return reason;
+        case NetCloseReason.RejectFull:
+          return reason;
+        case NetCloseReason.RejectVersion:
+          return reason;
+        case NetCloseReason.KickTimeout:
+          return reason;
+        case NetCloseReason.KickShutdown:
+          return reason;
+        case NetCloseReason.KickError:
+          return reason;
+        case NetCloseReason.KickUserReason:
+          return reason;
+      }
+
+      NetDebug.LogError("Bad kick reason: " + reason);
+      return NetCloseReason.INVALID;
+    }
+
+    /// <summary>
     /// Compares two bytes a - b with wrap-around arithmetic.
     /// </summary>
     internal static int ByteSeqDiff(byte a, byte b)

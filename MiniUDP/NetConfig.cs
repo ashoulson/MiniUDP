@@ -20,24 +20,25 @@
 
 namespace MiniUDP
 {
-  public enum NetRejectReason : byte
+  /// <summary>
+  /// Reason why a peer was closed or rejected either locally or remotely.
+  /// </summary>
+  public enum NetCloseReason : byte
   {
     INVALID = 0,
 
-    BadVersion,
-    Closed,
-    Full,
-    Disconnected,
-  }
+    RejectNotHost,  // Rejected because host is not accepting connections
+    RejectFull,     // Rejected because host is full
+    RejectVersion,  // Rejected because host is running a different version
 
-  public enum NetKickReason : byte
-  {
-    INVALID = 0,
+    KickTimeout,    // Kicked because of timeout
+    KickShutdown,   // Kicked because of shutdown
+    KickError,      // Kicked because of error, will NOT include socket error
+    KickUserReason, // Kicked because of application, will include reason byte
 
-    User,
-    Error,
-    Timeout,
-    Shutdown,
+    LocalTimeout,   // Dropped because of timeout
+    LocalShutdown,  // Dropped because of shutdown
+    LocalError,     // Dropped because of error, will include socket error
   }
 
   internal enum NetPacketType : byte
@@ -45,8 +46,7 @@ namespace MiniUDP
     INVALID = 0,
 
     Connect,
-    ConnectAccept,
-    ConnectReject,
+    Accept,
     Kick,
     Ping,
     Pong,
@@ -62,15 +62,8 @@ namespace MiniUDP
     Notification,
     Payload,
 
-    PeerConnected,
-    PeerClosedError,
-    PeerClosedTimeout,
-    PeerClosedShutdown,
-    PeerClosedKicked,
-
-    ConnectTimedOut,
-    ConnectAccepted,
-    ConnectRejected,
+    PeerConnected, // Peer successfully connected and was accepted
+    PeerClosed,    // Peer closed due to some reason (remote or local)
   }
 
   public class NetConfig

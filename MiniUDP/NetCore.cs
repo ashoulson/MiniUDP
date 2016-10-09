@@ -26,11 +26,20 @@ using System.Threading;
 
 namespace MiniUDP
 {
-  public delegate void NetPeerConnectEvent(NetPeer peer, string token);
+  public delegate void NetPeerConnectEvent(
+    NetPeer peer, 
+    string token);
+
+  public delegate void NetPeerCloseEvent(
+    NetPeer peer,
+    NetCloseReason reason,
+    byte userKickReason,
+    SocketError error);
 
   public class NetCore
   {
     public event NetPeerConnectEvent PeerConnected;
+    public event NetPeerCloseEvent PeerClosed;
 
     private readonly NetController controller;
     private Thread controllerThread;
@@ -74,7 +83,7 @@ namespace MiniUDP
         throw new ApplicationException("Token string too long");
 
       NetPeer pending = this.controller.BeginConnect(endpoint, token);
-      pending.Expose(this);
+      pending.SetCore(this);
       return pending;
     }
 
@@ -98,39 +107,14 @@ namespace MiniUDP
           switch (evnt.EventType)
           {
             case NetEventType.PeerConnected:
-              peer.Expose(this);
+              peer.SetCore(this);
+              peer.OnPeerConnected();
               this.PeerConnected?.Invoke(peer, peer.Token);
               break;
 
-            case NetEventType.PeerClosedError:
-              peer.OnPeerClosedError((SocketError)evnt.OtherData);
-              break;
-
-            case NetEventType.PeerClosedTimeout:
-              peer.OnPeerClosedTimeout();
-              break;
-
-            case NetEventType.PeerClosedShutdown:
-              peer.OnPeerClosedShutdown();
-              break;
-
-            case NetEventType.PeerClosedKicked:
-              byte userReason;
-              NetKickReason reason =
-                NetEvent.ReadReason(evnt.OtherData, out userReason);
-              peer.OnPeerClosedKicked(reason, userReason);
-              break;
-
-            case NetEventType.ConnectTimedOut:
-              peer.OnConnectTimedOut();
-              break;
-
-            case NetEventType.ConnectAccepted:
-              peer.OnConnectAccepted();
-              break;
-
-            case NetEventType.ConnectRejected:
-              peer.OnConnectRejected((NetRejectReason)evnt.OtherData);
+            case NetEventType.PeerClosed:
+              peer.OnPeerClosed(evnt.CloseReason, evnt.UserKickReason, evnt.SocketError);
+              this.PeerClosed?.Invoke(peer, evnt.CloseReason, evnt.UserKickReason, evnt.SocketError);
               break;
 
             case NetEventType.Payload:

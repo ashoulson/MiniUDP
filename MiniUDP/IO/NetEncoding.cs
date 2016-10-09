@@ -73,7 +73,7 @@ namespace MiniUDP
       while (position < length)
       {
         NetEvent notification = eventFactory.Invoke();
-        notification.Initialize(NetEventType.Notification, peer, 0);
+        notification.Initialize(NetEventType.Notification, peer);
         int bytesRead = notification.Read(buffer, position, length);
 
         if (bytesRead < 0)
