@@ -38,10 +38,10 @@ namespace Tests
       int headerSize;
       int packedSize;
 
-      evnt1.Initialize(NetEventType.Notification, null, 0, filled, 0, NetConfig.MAX_DATA_SIZE);
-      evnt2.Initialize(NetEventType.Notification, null, 0, filled, 0, halfPack);
-      evnt3.Initialize(NetEventType.Notification, null, 0, filled, 0, halfPack);
-      evnt4.Initialize(NetEventType.Notification, null, 0, filled, 0, halfPack + 1);
+      evnt1.Initialize(NetEventType.Notification, null, filled, 0, NetConfig.MAX_DATA_SIZE);
+      evnt2.Initialize(NetEventType.Notification, null, filled, 0, halfPack);
+      evnt3.Initialize(NetEventType.Notification, null, filled, 0, halfPack);
+      evnt4.Initialize(NetEventType.Notification, null, filled, 0, halfPack + 1);
 
       // The buffer should fit this notification exactly.
       srcQueue.Clear();
@@ -103,9 +103,9 @@ namespace Tests
       NetEvent evnt2 = new NetEvent();
       NetEvent evnt3 = new NetEvent();
 
-      evnt1.Initialize(NetEventType.Notification, null, 0, firstBytes, 0, firstBytes.Length);
-      evnt2.Initialize(NetEventType.Notification, null, 0, secondBytes, 0, secondBytes.Length);
-      evnt3.Initialize(NetEventType.Notification, null, 0, thirdBytes, 0, thirdBytes.Length);
+      evnt1.Initialize(NetEventType.Notification, null, firstBytes, 0, firstBytes.Length);
+      evnt2.Initialize(NetEventType.Notification, null, secondBytes, 0, secondBytes.Length);
+      evnt3.Initialize(NetEventType.Notification, null, thirdBytes, 0, thirdBytes.Length);
 
       Queue<NetEvent> srcQueue = new Queue<NetEvent>();
       Queue<NetEvent> destQueue = new Queue<NetEvent>();
@@ -197,7 +197,7 @@ namespace Tests
     {
       byte[] buffer = new byte[100];
 
-      NetPacketType type = NetPacketType.ConnectReject;
+      NetPacketType type = NetPacketType.Kick;
       byte firstParam = 0xAF;
       byte secondParam = 0xFA;
       int bytesPacked = 
@@ -216,7 +216,7 @@ namespace Tests
           out secondParamRead);
 
       Assert.AreEqual(0, buffer[bytesPacked]);
-      Assert.AreEqual(NetPacketType.ConnectReject, NetEncoding.GetType(buffer));
+      Assert.AreEqual(NetPacketType.Kick, NetEncoding.GetType(buffer));
       Assert.AreEqual(bytesPacked, bytesRead);
       Assert.AreEqual(firstParam, firstParamRead);
       Assert.AreEqual(secondParam, secondParamRead);

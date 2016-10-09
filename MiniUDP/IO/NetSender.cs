@@ -45,6 +45,29 @@ namespace MiniUDP
     }
 
     /// <summary>
+    /// Sends a kick (reject) message to an unconnected peer.
+    /// </summary>
+    internal SocketError SendReject(
+      IPEndPoint destination,
+      NetCloseReason reason)
+    {
+      // Skip the packet if it's a bad reason (this will cause error output)
+      if (NetUtil.ValidateKickReason(reason) == NetCloseReason.INVALID)
+        return SocketError.Success;
+
+      lock (this.sendLock)
+      {
+        int length =
+        NetEncoding.PackProtocolHeader(
+          this.sendBuffer,
+          NetPacketType.Kick,
+          (byte)reason,
+          0);
+        return this.TrySend(destination, this.sendBuffer, length);
+      }
+    }
+
+    /// <summary>
     /// Sends a request to connect to a remote peer.
     /// </summary>
     internal SocketError SendConnect(
@@ -73,7 +96,7 @@ namespace MiniUDP
         int length =
         NetEncoding.PackProtocolHeader(
           this.sendBuffer,
-          NetPacketType.ConnectAccept,
+          NetPacketType.Accept,
           0,
           0);
         return this.TrySend(peer.EndPoint, this.sendBuffer, length);
@@ -85,16 +108,20 @@ namespace MiniUDP
     /// </summary>
     internal SocketError SendKick(
       NetPeer peer,
-      NetKickReason kickReason,
+      NetCloseReason reason,
       byte userReason = 0)
     {
+      // Skip the packet if it's a bad reason (this will cause error output)
+      if (NetUtil.ValidateKickReason(reason) == NetCloseReason.INVALID)
+        return SocketError.Success;
+
       lock (this.sendLock)
       {
         int length =
         NetEncoding.PackProtocolHeader(
           this.sendBuffer,
           NetPacketType.Kick,
-          (byte)kickReason,
+          (byte)reason,
           userReason);
         return this.TrySend(peer.EndPoint, this.sendBuffer, length);
       }
@@ -162,26 +189,6 @@ namespace MiniUDP
         return this.TrySend(peer.EndPoint, this.sendBuffer, length);
       }
     }
-
-    /// <summary>
-    /// Notifies a sender that we have rejected their connection request.
-    /// </summary>
-    internal SocketError SendReject(
-      IPEndPoint destination,
-      NetRejectReason rejectReason)
-    {
-      lock (this.sendLock)
-      {
-        int length =
-        NetEncoding.PackProtocolHeader(
-          this.sendBuffer,
-          NetPacketType.ConnectReject,
-          (byte)rejectReason,
-          0);
-        return this.TrySend(destination, this.sendBuffer, length);
-      }
-    }
-
 
     /// <summary>
     /// Immediately sends out a payload to a peer.

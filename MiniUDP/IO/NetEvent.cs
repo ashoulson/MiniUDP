@@ -19,6 +19,7 @@
 */
 
 using System;
+using System.Net.Sockets;
 
 namespace MiniUDP
 {
@@ -34,43 +35,6 @@ namespace MiniUDP
     internal const int HEADER_SIZE = sizeof(ushort); // Byte count
     #endregion
 
-    #region Disconnect Reason
-    internal static int PackReason(
-      byte internalReason, 
-      byte userReason)
-    {
-      if ((NetKickReason)internalReason == NetKickReason.User)
-      {
-        if (userReason == 0)
-          NetDebug.LogError("Invalid disconnect reason (user = 0)");
-        return userReason;
-      }
-      return -internalReason;
-    }
-
-    internal static NetKickReason ReadReason(
-      int reasonPacked, 
-      out byte userReason)
-    {
-      userReason = 0;
-      if (reasonPacked == 0)
-        return NetKickReason.INVALID;
-      if (reasonPacked < 0)
-      {
-        NetKickReason reason = (NetKickReason)(-reasonPacked);
-        if (reason == NetKickReason.User)
-        {
-          NetDebug.LogError("Invalid disconnect reason (user with no data)");
-          return NetKickReason.INVALID;
-        }
-        return (NetKickReason)(-reasonPacked);
-      }
-
-      userReason = (byte)reasonPacked;
-      return NetKickReason.User;
-    }
-    #endregion
-
     void INetPoolable<NetEvent>.Reset() { this.Reset(); }
 
     internal byte[] EncodedData { get { return this.buffer; } }
@@ -83,11 +47,15 @@ namespace MiniUDP
     // Additional data for passing events around internally, not synchronized
     internal NetEventType EventType { get; private set; }
     internal NetPeer Peer { get; private set; }  // Associated peer
-    internal int OtherData { get; private set; } // Sequence, Error code, etc.
+
+    // Additional data, may or may not be set
+    internal NetCloseReason CloseReason { get; set; }
+    internal SocketError SocketError { get; set; }
+    internal byte UserKickReason { get; set; }
+    internal ushort Sequence { get; set; }
 
     // Helpers
     internal int PackSize { get { return this.length + NetEvent.HEADER_SIZE; } }
-    internal ushort Sequence { get { return (ushort)this.OtherData; } }
 
     public NetEvent()
     {
@@ -100,24 +68,26 @@ namespace MiniUDP
       this.length = 0;
       this.EventType = NetEventType.INVALID;
       this.Peer = null;
-      this.OtherData = 0;
+
+      this.CloseReason = NetCloseReason.INVALID;
+      this.SocketError = SocketError.SocketError;
+      this.UserKickReason = 0;
+      this.Sequence = 0;
     }
 
     internal void Initialize(
       NetEventType type, 
-      NetPeer peer, 
-      int otherData)
+      NetPeer peer)
     {
+      this.Reset();
       this.length = 0;
       this.EventType = type;
       this.Peer = peer;
-      this.OtherData = otherData;
     }
 
     internal void Initialize(
       NetEventType type,
       NetPeer peer,
-      int otherData,
       byte[] buffer,
       int position,
       int length)
@@ -125,17 +95,12 @@ namespace MiniUDP
       if (length > NetConfig.MAX_DATA_SIZE)
         throw new OverflowException("Data too long for NetEvent");
 
+      this.Reset();
       this.length = (ushort)length;
       this.EventType = type;
       this.Peer = peer;
-      this.OtherData = otherData;
 
       Array.Copy(buffer, position, this.buffer, 0, length);
-    }
-
-    internal void SetSequence(ushort sequence)
-    {
-      this.OtherData = sequence;
     }
 
     #region Encoding

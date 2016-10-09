@@ -34,6 +34,7 @@ namespace SampleCommon
     {
       this.connection = new NetCore(version, allowConnections);
       this.connection.PeerConnected += Connection_PeerConnected;
+      this.connection.PeerClosed += Connection_PeerClosed;
     }
 
     public void Update()
@@ -45,12 +46,13 @@ namespace SampleCommon
     {
       Console.WriteLine(peer.EndPoint + " peer connected: " + token);
 
-      peer.PeerClosedError += Peer_PeerClosedError;
-      peer.PeerClosedTimeout += Peer_PeerClosedTimeout;
-      peer.PeerClosedShutdown += Peer_PeerClosedShutdown;
-      peer.PeerClosedKicked += Peer_PeerClosedKicked;
       peer.PayloadReceived += Peer_PayloadReceived;
       peer.NotificationReceived += Peer_NotificationReceived;
+    }
+
+    private void Connection_PeerClosed(NetPeer peer, NetCloseReason reason, byte userKickReason, SocketError error)
+    {
+      Console.WriteLine("Peer closed due to reason: " + reason);
     }
 
     private void Peer_PayloadReceived(NetPeer peer, byte[] data, int dataLength)
@@ -69,29 +71,6 @@ namespace SampleCommon
         (peer.Traffic.RemoteDrop * 100.0f) + "%");
     }
 
-    private void Peer_PeerClosedTimeout(NetPeer peer)
-    {
-      Console.WriteLine(peer.EndPoint + " peer closed due to timeout");
-    }
-
-    private void Peer_PeerClosedError(NetPeer peer, SocketError error)
-    {
-      Console.WriteLine(peer.EndPoint + " peer closed due to error: " + error);
-    }
-
-    private void Peer_PeerClosedShutdown(NetPeer peer)
-    {
-      Console.WriteLine(peer.EndPoint + " peer closed due to shutdown");
-    }
-
-    private void Peer_PeerClosedKicked(NetPeer peer, NetKickReason reason, byte userReason)
-    {
-      if (reason == NetKickReason.User)
-        Console.WriteLine(peer.EndPoint + " peer closed remotely due to user reason: " + userReason);
-      else
-        Console.WriteLine(peer.EndPoint + " peer closed remotely due to internal reason: " + reason);
-    }
-
     public void Host(int port)
     {
       this.connection.Host(port);
@@ -102,35 +81,10 @@ namespace SampleCommon
       NetPeer host = 
         this.connection.Connect(NetUtil.StringToEndPoint(address), token);
 
-      host.ConnectTimedOut += Host_ConnectTimedOut;
-      host.ConnectAccepted += Host_ConnectAccepted;
-      host.ConnectRejected += Host_ConnectRejected;
-
-      // TODO: This is really inconvenient. Consolidate some of these,
-      // especially the Connect/ConnectAccepted events
-      host.PeerClosedError += Peer_PeerClosedError;
-      host.PeerClosedTimeout += Peer_PeerClosedTimeout;
-      host.PeerClosedShutdown += Peer_PeerClosedShutdown;
-      host.PeerClosedKicked += Peer_PeerClosedKicked;
       host.PayloadReceived += Peer_PayloadReceived;
       host.NotificationReceived += Peer_NotificationReceived;
 
       return host;
-    }
-
-    private void Host_ConnectTimedOut(NetPeer peer)
-    {
-      Console.WriteLine(peer.EndPoint + " connection attempt timed out");
-    }
-
-    private void Host_ConnectAccepted(NetPeer peer, string token)
-    {
-      Console.WriteLine(peer.EndPoint + " connection accepted: " + token);
-    }
-
-    private void Host_ConnectRejected(NetPeer peer, NetRejectReason reason)
-    {
-      Console.WriteLine(peer.EndPoint + " connection rejected: " + reason);
     }
 
     public void Stop()

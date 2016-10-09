@@ -23,7 +23,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading;
 
 namespace MiniUDP
@@ -51,7 +50,6 @@ namespace MiniUDP
         this.CreateEvent(
           NetEventType.Notification,
           target,
-          0, // Set by peer
           buffer,
           0,
           length);
@@ -122,7 +120,7 @@ namespace MiniUDP
     /// </summary>
     internal void SendKick(NetPeer peer, byte reason)
     {
-      this.sender.SendKick(peer, NetKickReason.User, reason);
+      this.sender.SendKick(peer, NetCloseReason.KickUserReason, reason);
     }
 
     /// <summary>
@@ -142,7 +140,7 @@ namespace MiniUDP
     #region Background Thread
     // This region should only be accessed by the BACKGROUND thread
 
-    private bool IsFull { get { return false; } }
+    private bool IsFull { get { return false; } } // TODO: Keep a count
     private long Time { get { return this.timer.ElapsedMilliseconds; } }
 
     private readonly NetPipeline<NetPeer> connectIn;
@@ -210,11 +208,11 @@ namespace MiniUDP
       foreach (NetPeer peer in this.GetPeers())
       {
         bool sendEvent = peer.IsOpen;
-        this.ClosePeer(peer, NetKickReason.Shutdown);
+        this.ClosePeer(peer, NetCloseReason.KickShutdown);
 
         if (sendEvent)
           this.eventOut.Enqueue(
-            this.CreateEvent(NetEventType.PeerClosedShutdown, peer, 0));
+            this.CreateClosedEvent(peer, NetCloseReason.LocalShutdown));
       }
     }
 
@@ -317,9 +315,9 @@ namespace MiniUDP
     {
       if (peer.GetTimeSinceRecv(this.Time) > NetConfig.ConnectionTimeOut)
       {
-        this.ClosePeer(peer, NetKickReason.Timeout);
+        this.ClosePeerSilent(peer);
         this.eventOut.Enqueue(
-          this.CreateEvent(NetEventType.ConnectTimedOut, peer, 0));
+          this.CreateClosedEvent(peer, NetCloseReason.LocalTimeout));
         return;
       }
 
@@ -333,9 +331,9 @@ namespace MiniUDP
     {
       if (peer.GetTimeSinceRecv(this.Time) > NetConfig.ConnectionTimeOut)
       {
-        this.ClosePeer(peer, NetKickReason.Timeout);
+        this.ClosePeer(peer, NetCloseReason.KickTimeout);
         this.eventOut.Enqueue(
-          this.CreateEvent(NetEventType.PeerClosedTimeout, peer, 0));
+          this.CreateClosedEvent(peer, NetCloseReason.LocalTimeout));
         return;
       }
 
@@ -368,7 +366,7 @@ namespace MiniUDP
     /// </summary>
     private void ClosePeer(
       NetPeer peer, 
-      NetKickReason reason)
+      NetCloseReason reason)
     {
       if (peer.IsOpen)
         this.sender.SendKick(peer, reason);
@@ -417,12 +415,8 @@ namespace MiniUDP
           {
             switch (type)
             {
-              case NetPacketType.ConnectAccept:
+              case NetPacketType.Accept:
                 this.HandleConnectAccept(peer, buffer, length);
-                break;
-
-              case NetPacketType.ConnectReject:
-                this.HandleConnectReject(peer, buffer, length);
                 break;
 
               case NetPacketType.Kick:
@@ -480,7 +474,7 @@ namespace MiniUDP
 
         // Queue the event out to the main thread to receive the connection
         this.eventOut.Enqueue(
-          this.CreateEvent(NetEventType.PeerConnected, peer, 0));
+          this.CreateEvent(NetEventType.PeerConnected, peer));
       }
     }
 
@@ -497,27 +491,7 @@ namespace MiniUDP
       peer.Connected();
 
       this.eventOut.Enqueue(
-        this.CreateEvent(NetEventType.ConnectAccepted, peer, 0));
-    }
-
-    private void HandleConnectReject(
-      NetPeer peer,
-      byte[] buffer,
-      int length)
-    {
-      NetDebug.Assert(peer.IsClient == false, "Ignoring reject from client");
-      if (peer.IsConnected || peer.IsClient)
-        return;
-
-      peer.OnReceiveOther(this.Time);
-      this.ClosePeerSilent(peer);
-
-      byte reason;
-      byte unused2;
-      NetEncoding.ReadProtocolHeader(buffer, out reason, out unused2);
-
-      this.eventOut.Enqueue(
-        this.CreateEvent(NetEventType.ConnectRejected, peer, reason));
+        this.CreateEvent(NetEventType.PeerConnected, peer));
     }
 
     private void HandleKick(
@@ -528,32 +502,22 @@ namespace MiniUDP
       if (peer.IsClosed)
         return;
 
-      bool isConnected = peer.IsConnected;
+      byte rawReason;
+      byte userReason;
+      NetEncoding.ReadProtocolHeader(
+        buffer,
+        out rawReason,
+        out userReason);
+
+      NetCloseReason closeReason = (NetCloseReason)rawReason;
+      // Skip the packet if it's a bad reason (this will cause error output)
+      if (NetUtil.ValidateKickReason(closeReason) == NetCloseReason.INVALID)
+        return;
 
       peer.OnReceiveOther(this.Time);
       this.ClosePeerSilent(peer);
-
-      if (isConnected)
-      {
-        byte internalReason;
-        byte userReason;
-        NetEncoding.ReadProtocolHeader(
-          buffer, 
-          out internalReason, 
-          out userReason);
-
-        int reason = NetEvent.PackReason(internalReason, userReason);
-        this.eventOut.Enqueue(
-          this.CreateEvent(NetEventType.PeerClosedKicked, peer, reason));
-      }
-      else
-      {
-        // Edge case where we get a disconnect packet before being connected
-        int reason = (byte)NetRejectReason.Disconnected;
-        this.eventOut.Enqueue(
-          this.CreateEvent(NetEventType.ConnectRejected, peer, reason));
-        return;
-      }
+      this.eventOut.Enqueue(
+        this.CreateClosedEvent(peer, closeReason, userReason));
     }
 
     private void HandlePing(
@@ -646,7 +610,6 @@ namespace MiniUDP
           this.CreateEvent(
             NetEventType.Payload, 
             peer,
-            0,
             buffer,
             position,
             length - position));
@@ -657,21 +620,18 @@ namespace MiniUDP
     #region Event Allocation
     private NetEvent CreateEvent(
       NetEventType type,
-      NetPeer target,
-      int otherData)
+      NetPeer target)
     {
       NetEvent evnt = this.eventPool.Allocate();
       evnt.Initialize(
         type,
-        target,
-        otherData);
+        target);
       return evnt;
     }
 
     private NetEvent CreateEvent(
       NetEventType type,
       NetPeer target,
-      int otherData,
       byte[] buffer,
       int position,
       int length)
@@ -680,10 +640,22 @@ namespace MiniUDP
       evnt.Initialize(
         type,
         target,
-        otherData,
         buffer,
         position,
         length);
+      return evnt;
+    }
+
+    private NetEvent CreateClosedEvent(
+      NetPeer target,
+      NetCloseReason closeReason,
+      byte userKickReason = 0,
+      SocketError socketError = SocketError.SocketError)
+    {
+      NetEvent evnt = this.CreateEvent(NetEventType.PeerClosed, target);
+      evnt.CloseReason = closeReason;
+      evnt.UserKickReason = userKickReason;
+      evnt.SocketError = socketError;
       return evnt;
     }
 
@@ -697,6 +669,10 @@ namespace MiniUDP
     /// <summary>
     /// Whether or not we should accept a connection before consulting
     /// the application for the final verification step.
+    /// 
+    /// TODO: Should we create a peer anyway temporarily and include it in
+    ///       cross-thread queue event so the main thread knows we rejected
+    ///       a connection attempt for one of these reasons?
     /// </summary>
     private bool ShouldCreatePeer(
       IPEndPoint source,
@@ -711,19 +687,19 @@ namespace MiniUDP
 
       if (this.acceptConnections == false)
       {
-        this.sender.SendReject(source, NetRejectReason.Closed);
+        this.sender.SendReject(source, NetCloseReason.RejectNotHost);
         return false;
       }
 
       if (this.IsFull)
       {
-        this.sender.SendReject(source, NetRejectReason.Full);
+        this.sender.SendReject(source, NetCloseReason.RejectFull);
         return false;
       }
 
       if (this.version != version)
       {
-        this.sender.SendReject(source, NetRejectReason.BadVersion);
+        this.sender.SendReject(source, NetCloseReason.RejectVersion);
         return false;
       }
 
