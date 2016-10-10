@@ -31,17 +31,13 @@ namespace MiniUDP
   /// </summary>
   internal class NetEvent : INetPoolable<NetEvent>
   {
-    #region Header
-    internal const int NOTIFICATION_HEADER_SIZE = sizeof(ushort); // Byte count
-    #endregion
-
     void INetPoolable<NetEvent>.Reset() { this.Reset(); }
 
     internal byte[] EncodedData { get { return this.buffer; } }
     internal ushort EncodedLength { get { return this.length; } }
 
     // Buffer for encoded user data
-    private readonly byte[] buffer;
+    private byte[] buffer;
     private ushort length;
 
     // Additional data for passing events around internally, not synchronized
@@ -56,7 +52,7 @@ namespace MiniUDP
 
     public NetEvent()
     {
-      this.buffer = new byte[NetConfig.MAX_DATA_SIZE];
+      this.buffer = new byte[NetConfig.DATA_INITIAL];
       this.Reset();
     }
 
@@ -82,12 +78,23 @@ namespace MiniUDP
       this.Peer = peer;
     }
 
-    internal void ReadData(byte[] sourceBuffer, int position, ushort length)
+    internal bool ReadData(byte[] sourceBuffer, int position, ushort length)
     {
-      if (length > NetConfig.MAX_DATA_SIZE)
-        throw new OverflowException("Data too long for NetEvent");
+      if (length > NetConfig.DATA_MAXIMUM)
+      {
+        NetDebug.LogError("Data too long for NetEvent");
+        return false;
+      }
+
+      // Resize if necessary
+      int paddedLength = length + NetConfig.DATA_PADDING;
+      if (this.buffer.Length < paddedLength)
+        this.buffer = new byte[paddedLength];
+
+      // Copy the contents
       Array.Copy(sourceBuffer, position, this.buffer, 0, length);
       this.length = length;
+      return true;
     }
   }
 }

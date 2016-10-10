@@ -50,7 +50,9 @@ namespace MiniUDP
         this.CreateEvent(
           NetEventType.Notification,
           target);
-      notification.ReadData(buffer, 0, length);
+
+      if (notification.ReadData(buffer, 0, length) == false)
+        throw new OverflowException("Data too long for notification");
       this.notificationIn.Enqueue(notification);
     }
 

@@ -100,8 +100,10 @@ namespace MiniUDP
 
     #region Packet
     internal const int SOCKET_BUFFER_SIZE = 2048;
-    public const int MAX_DATA_SIZE = 1200;
-    public const int MAX_NOTIFICATION_PACK = MAX_DATA_SIZE + NetEvent.NOTIFICATION_HEADER_SIZE;
+    public const int DATA_MAXIMUM = 1200; // Max size for a data container
+    public const int DATA_INITIAL = 128; // Starting size for a new container
+    public const int DATA_PADDING = 8; // Bytes to add when resizing container
+
     public const int MAX_VERSION_BYTES = (1 << (8 * sizeof(byte))) - 1;
     public const int MAX_TOKEN_BYTES = (1 << (8 * sizeof(byte))) - 1;
     #endregion

@@ -68,10 +68,10 @@ namespace Tests
     public void TestNotificationPack()
     {
       int headerSize = NetEncoding.NOTIFICATION_HEADER_SIZE;
-      int maxPack = NetConfig.MAX_NOTIFICATION_PACK;
+      int maxPack = NetEncoding.MAX_NOTIFICATION_PACK;
       int halfPack = (maxPack / 2) - headerSize;
 
-      NetEvent evnt1 = CreateFilled(NetConfig.MAX_DATA_SIZE);
+      NetEvent evnt1 = CreateFilled(NetConfig.DATA_MAXIMUM);
       NetEvent evnt2 = CreateFilled(halfPack);
       NetEvent evnt3 = CreateFilled(halfPack);
       NetEvent evnt4 = CreateFilled(halfPack + 1);

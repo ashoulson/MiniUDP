@@ -94,13 +94,8 @@ namespace MiniUDP
     /// </summary>
     public SocketError SendPayload(byte[] data, ushort length)
     {
-      if (length < 0)
+      if ((length < 0) || (length > NetConfig.DATA_MAXIMUM))
         throw new ArgumentOutOfRangeException("length");
-      if (length > NetConfig.MAX_DATA_SIZE)
-      {
-        NetDebug.LogError("Payload too large: " + length);
-        return SocketError.MessageSize;
-      }
 
       this.payloadSeqOut++;
       return this.core.SendPayload(this, this.payloadSeqOut, data, length);
@@ -111,13 +106,8 @@ namespace MiniUDP
     /// </summary>
     public bool QueueNotification(byte[] data, ushort length)
     {
-      if (length < 0)
+      if ((length < 0) || (length > NetConfig.DATA_MAXIMUM))
         throw new ArgumentOutOfRangeException("length");
-      if (length > NetConfig.MAX_DATA_SIZE)
-      {
-        NetDebug.LogError("Notification too large: " + length);
-        return false;
-      }
 
       this.core.QueueNotification(this, data, length);
       return true;
