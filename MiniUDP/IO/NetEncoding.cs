@@ -26,11 +26,13 @@ namespace MiniUDP
 {
   internal static class NetEncoding
   {
-    internal static int CONNECT_HEADER_SIZE = 3;
-    internal static int PROTOCOL_HEADER_SIZE = 3;
-    internal static int PAYLOAD_HEADER_SIZE = 3;
-    internal static int CARRIER_HEADER_SIZE = 5;
-    internal static int NOTIFICATION_HEADER_SIZE = 2;
+    internal const int CONNECT_HEADER_SIZE = 3;
+    internal const int PROTOCOL_HEADER_SIZE = 3;
+    internal const int PAYLOAD_HEADER_SIZE = 3;
+    internal const int CARRIER_HEADER_SIZE = 5;
+    internal const int NOTIFICATION_HEADER_SIZE = 2;
+    internal const int MAX_NOTIFICATION_PACK =
+      NetConfig.DATA_MAXIMUM + NetEncoding.NOTIFICATION_HEADER_SIZE;
 
     /// <summary>
     /// Peeks the type from the packet buffer.
@@ -74,14 +76,12 @@ namespace MiniUDP
       sequence = NetEncoding.ReadU16(buffer, 1);
       int position = NetEncoding.PAYLOAD_HEADER_SIZE;
 
-      int maxSize = NetConfig.MAX_DATA_SIZE;
       ushort dataLength = (ushort)(length - position);
-      if (((position + dataLength) > length) || (dataLength > maxSize))
-        return false;
+      if ((position + dataLength) > length)
+        return false; // We're reading past the end of the packet data
 
       evnt = eventFactory.Invoke(NetEventType.Payload, peer);
-      evnt.ReadData(buffer, position, dataLength);
-      return true;
+      return evnt.ReadData(buffer, position, dataLength); ;
     }
 
     /// <summary>
@@ -103,7 +103,7 @@ namespace MiniUDP
 
       // Pack notifications
       int dataPacked = 0;
-      int maxDataPack = NetConfig.MAX_NOTIFICATION_PACK;
+      int maxDataPack = NetEncoding.MAX_NOTIFICATION_PACK;
       foreach (NetEvent notification in notifications)
       {
         // See if we can fit the notification
@@ -145,7 +145,7 @@ namespace MiniUDP
       int position = NetEncoding.CARRIER_HEADER_SIZE;
 
       // Validate
-      int maxDataPack = NetConfig.MAX_NOTIFICATION_PACK;
+      int maxDataPack = NetEncoding.MAX_NOTIFICATION_PACK;
       if ((position > length) || ((length - position) > maxDataPack))
         return false;
 
@@ -289,7 +289,8 @@ namespace MiniUDP
         return -1;
 
       // Read the data into the event's buffer
-      destination.ReadData(buffer, position, dataLength);
+      if (destination.ReadData(buffer, position, dataLength) == false)
+        return -1;
       return NetEncoding.NOTIFICATION_HEADER_SIZE + dataLength;
     }
 
