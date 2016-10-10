@@ -32,13 +32,13 @@ namespace MiniUDP
   internal class NetEvent : INetPoolable<NetEvent>
   {
     #region Header
-    internal const int HEADER_SIZE = sizeof(ushort); // Byte count
+    internal const int NOTIFICATION_HEADER_SIZE = sizeof(ushort); // Byte count
     #endregion
 
     void INetPoolable<NetEvent>.Reset() { this.Reset(); }
 
     internal byte[] EncodedData { get { return this.buffer; } }
-    internal int EncodedLength { get { return this.length; } }
+    internal ushort EncodedLength { get { return this.length; } }
 
     // Buffer for encoded user data
     private readonly byte[] buffer;
@@ -53,9 +53,6 @@ namespace MiniUDP
     internal SocketError SocketError { get; set; }
     internal byte UserKickReason { get; set; }
     internal ushort Sequence { get; set; }
-
-    // Helpers
-    internal int PackSize { get { return this.length + NetEvent.HEADER_SIZE; } }
 
     public NetEvent()
     {
@@ -85,59 +82,12 @@ namespace MiniUDP
       this.Peer = peer;
     }
 
-    internal void Initialize(
-      NetEventType type,
-      NetPeer peer,
-      byte[] buffer,
-      int length)
+    internal void ReadData(byte[] sourceBuffer, int position, ushort length)
     {
       if (length > NetConfig.MAX_DATA_SIZE)
         throw new OverflowException("Data too long for NetEvent");
-
-      this.Reset();
-      this.length = (ushort)length;
-      this.EventType = type;
-      this.Peer = peer;
-
-      Array.Copy(buffer, this.buffer, length);
+      Array.Copy(sourceBuffer, position, this.buffer, 0, length);
+      this.length = length;
     }
-
-    #region Encoding
-    internal int Pack(byte[] destBuf, int position)
-    {
-      position += this.PackHeader(destBuf, position);
-      Array.Copy(this.buffer, 0, destBuf, position, this.length);
-      return this.PackSize;
-    }
-
-    internal int Read(byte[] sourceBuf, int position, int sourceLength)
-    {
-      // Not enough room to read the header
-      if ((sourceLength - position) < NetEvent.HEADER_SIZE)
-        return -1;
-
-      int headerLen = this.ReadHeader(sourceBuf, position, out this.length);
-
-      // We're trying to read past the end
-      if ((position + headerLen + this.length) > sourceLength)
-        return -1;
-
-      position += headerLen;
-      Array.Copy(sourceBuf, position, this.buffer, 0, this.length);
-      return this.PackSize;
-    }
-
-    private int PackHeader(byte[] destBuf, int position)
-    {
-      NetEncoding.PackU16(destBuf, position, this.length);
-      return NetEvent.HEADER_SIZE;
-    }
-
-    private int ReadHeader(byte[] sourceBuf, int position, out ushort length)
-    {
-      length = NetEncoding.ReadU16(sourceBuf, position);
-      return NetEvent.HEADER_SIZE;
-    }
-    #endregion
   }
 }

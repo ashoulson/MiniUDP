@@ -92,7 +92,7 @@ namespace MiniUDP
     /// <summary>
     /// Immediately sends an unreliable sequenced payload.
     /// </summary>
-    public SocketError SendPayload(byte[] data, int length)
+    public SocketError SendPayload(byte[] data, ushort length)
     {
       if (length < 0)
         throw new ArgumentOutOfRangeException("length");
@@ -109,7 +109,7 @@ namespace MiniUDP
     /// <summary>
     /// Queues a reliable ordered notification for delivery.
     /// </summary>
-    public bool QueueNotification(byte[] data, int length)
+    public bool QueueNotification(byte[] data, ushort length)
     {
       if (length < 0)
         throw new ArgumentOutOfRangeException("length");

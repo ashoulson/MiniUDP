@@ -51,7 +51,7 @@ namespace MiniUDP
     Ping,
     Pong,
 
-    Notification,
+    Carrier,
     Payload,
   }
 
@@ -101,7 +101,7 @@ namespace MiniUDP
     #region Packet
     internal const int SOCKET_BUFFER_SIZE = 2048;
     public const int MAX_DATA_SIZE = 1200;
-    public const int MAX_NOTIFICATION_PACK = MAX_DATA_SIZE + NetEvent.HEADER_SIZE;
+    public const int MAX_NOTIFICATION_PACK = MAX_DATA_SIZE + NetEvent.NOTIFICATION_HEADER_SIZE;
     public const int MAX_VERSION_BYTES = (1 << (8 * sizeof(byte))) - 1;
     public const int MAX_TOKEN_BYTES = (1 << (8 * sizeof(byte))) - 1;
     #endregion

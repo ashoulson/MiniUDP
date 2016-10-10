@@ -48,14 +48,14 @@ class Program
   private static void SendNotification()
   {
     byte[] data = Encoding.UTF8.GetBytes("Notification " + notificationCount);
-    Program.peer.QueueNotification(data, data.Length);
+    Program.peer.QueueNotification(data, (ushort)data.Length);
     notificationCount++;
   }
 
   private static void SendPayload()
   {
     byte[] data = Encoding.UTF8.GetBytes("Payload " + payloadCount);
-    Program.peer.SendPayload(data, data.Length);
+    Program.peer.SendPayload(data, (ushort)data.Length);
     payloadCount++;
   }
 }

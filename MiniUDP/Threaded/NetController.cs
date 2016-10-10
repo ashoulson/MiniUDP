@@ -44,14 +44,13 @@ namespace MiniUDP
     /// Queues a notification to be sent to the given peer.
     /// Deep-copies the user data given.
     /// </summary>
-    internal void QueueNotification(NetPeer target, byte[] buffer, int length)
+    internal void QueueNotification(NetPeer target, byte[] buffer, ushort length)
     {
       NetEvent notification =
         this.CreateEvent(
           NetEventType.Notification,
-          target,
-          buffer,
-          length);
+          target);
+      notification.ReadData(buffer, 0, length);
       this.notificationIn.Enqueue(notification);
     }
 
@@ -130,7 +129,7 @@ namespace MiniUDP
       NetPeer peer,
       ushort sequence,
       byte[] data,
-      int length)
+      ushort length)
     {
       return this.sender.SendPayload(peer, sequence, data, length);
     }
@@ -432,7 +431,7 @@ namespace MiniUDP
                 this.HandlePong(peer, buffer, length);
                 break;
 
-              case NetPacketType.Notification:
+              case NetPacketType.Carrier:
                 this.HandleCarrier(peer, buffer, length);
                 break;
 
@@ -457,10 +456,18 @@ namespace MiniUDP
     {
       string version;
       string token;
-      NetEncoding.ReadConnectRequest(
-        buffer,
-        out version,
-        out token);
+      bool success = 
+        NetEncoding.ReadConnectRequest(
+          buffer,
+          out version,
+          out token);
+
+      // Validate
+      if (success == false)
+      {
+        NetDebug.LogError("Error reading connect request");
+        return;
+      }
 
       if (this.ShouldCreatePeer(source, version))
       {
@@ -505,10 +512,19 @@ namespace MiniUDP
 
       byte rawReason;
       byte userReason;
-      NetEncoding.ReadProtocol(
-        buffer,
-        out rawReason,
-        out userReason);
+      bool success = 
+        NetEncoding.ReadProtocol(
+          buffer,
+          length,
+          out rawReason,
+          out userReason);
+
+      // Validate
+      if (success == false)
+      {
+        NetDebug.LogError("Error reading kick");
+        return;
+      }
 
       NetCloseReason closeReason = (NetCloseReason)rawReason;
       // Skip the packet if it's a bad reason (this will cause error output)
@@ -531,8 +547,19 @@ namespace MiniUDP
 
       byte pingSeq;
       byte loss;
-      int headerSize = 
-        NetEncoding.ReadProtocol(buffer, out pingSeq, out loss);
+      bool success =
+        NetEncoding.ReadProtocol(
+          buffer, 
+          length, 
+          out pingSeq, 
+          out loss);
+
+      // Validate
+      if (success == false)
+      {
+        NetDebug.LogError("Error reading ping");
+        return;
+      }
 
       peer.OnReceivePing(this.Time, loss);
       this.sender.SendPong(peer, pingSeq, peer.GenerateDrop());
@@ -548,8 +575,19 @@ namespace MiniUDP
 
       byte pongSeq;
       byte drop;
-      int headerSize = 
-        NetEncoding.ReadProtocol(buffer, out pongSeq, out drop);
+      bool success =
+        NetEncoding.ReadProtocol(
+          buffer, 
+          length,
+          out pongSeq, 
+          out drop);
+
+      // Validate
+      if (success == false)
+      {
+        NetDebug.LogError("Error reading pong");
+        return;
+      }
 
       peer.OnReceivePong(this.Time, pongSeq, drop);
     }
@@ -562,20 +600,26 @@ namespace MiniUDP
       if (peer.IsConnected == false)
         return;
 
+      // Read the carrier and notifications
       ushort notificationAck;
       ushort notificationSeq;
       this.reusableQueue.Clear();
       bool success = 
-        NetEncoding.ReadNotifications(
+        NetEncoding.ReadCarrier(
+          this.CreateEvent,
           peer, 
           buffer,
           length,
           out notificationAck,
           out notificationSeq,
-          this.AllocateNotification, 
           this.reusableQueue);
+
+      // Validate
       if (success == false)
+      {
+        NetDebug.LogError("Error reading carrier");
         return;
+      }
 
       long curTime = this.Time;
       peer.OnReceiveCarrier(curTime, notificationAck, this.RecycleEvent);
@@ -595,27 +639,28 @@ namespace MiniUDP
       if (peer.IsConnected == false)
         return;
 
+      // Read the payload
       ushort payloadSeq;
-      int dataLength;
+      NetEvent evnt;
       bool success = 
         NetEncoding.ReadPayload(
+          this.CreateEvent,
+          peer,
           buffer,
           length,
           out payloadSeq,
-          this.reusableBuffer,
-          out dataLength);
-      if (success == false)
-        return;
+          out evnt);
 
-      if (peer.OnReceivePayload(this.Time, payloadSeq))
+      // Validate
+      if (success == false)
       {
-        this.eventOut.Enqueue(
-          this.CreateEvent(
-            NetEventType.Payload, 
-            peer,
-            buffer,
-            dataLength));
+        NetDebug.LogError("Error reading payload");
+        return;
       }
+
+      // Enqueue the event for processing if the peer can receive it
+      if (peer.OnReceivePayload(this.Time, payloadSeq))
+        this.eventOut.Enqueue(evnt);
     }
     #endregion
 
@@ -631,21 +676,6 @@ namespace MiniUDP
       return evnt;
     }
 
-    private NetEvent CreateEvent(
-      NetEventType type,
-      NetPeer target,
-      byte[] buffer,
-      int length)
-    {
-      NetEvent evnt = this.eventPool.Allocate();
-      evnt.Initialize(
-        type,
-        target,
-        buffer,
-        length);
-      return evnt;
-    }
-
     private NetEvent CreateClosedEvent(
       NetPeer target,
       NetCloseReason closeReason,
@@ -657,11 +687,6 @@ namespace MiniUDP
       evnt.UserKickReason = userKickReason;
       evnt.SocketError = socketError;
       return evnt;
-    }
-
-    private NetEvent AllocateNotification()
-    {
-      return this.eventPool.Allocate();
     }
     #endregion
 
