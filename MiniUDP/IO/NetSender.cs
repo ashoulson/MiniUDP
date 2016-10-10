@@ -175,7 +175,7 @@ namespace MiniUDP
       lock (this.sendLock)
       {
         int packedLength =
-          NetEncoding.PackNotifications(
+          NetEncoding.PackCarrier(
             this.sendBuffer,
             peer.NotificationAck,
             peer.GetFirstSequence(),
@@ -191,16 +191,14 @@ namespace MiniUDP
     internal SocketError SendPayload(
       NetPeer peer,
       ushort sequence,
-      byte[] buffer,
-      int length)
+      byte[] data,
+      ushort dataLength)
     {
       lock (this.sendLock)
       {
-        int position = 
-          NetEncoding.PackPayloadHeader(this.sendBuffer, sequence);
-        Array.Copy(buffer, 0, this.sendBuffer, position, length);
-        position += length;
-        return this.TrySend(peer.EndPoint, this.sendBuffer, position);
+        int size = 
+          NetEncoding.PackPayload(this.sendBuffer, sequence, data, dataLength);
+        return this.TrySend(peer.EndPoint, this.sendBuffer, size);
       }
     }
 

@@ -26,6 +26,15 @@ namespace MiniUDP
 {
   internal static class NetEncoding
   {
+    internal static int CONNECT_HEADER_SIZE = 3;
+    internal static int PROTOCOL_HEADER_SIZE = 3;
+    internal static int PAYLOAD_HEADER_SIZE = 3;
+    internal static int CARRIER_HEADER_SIZE = 5;
+    internal static int NOTIFICATION_HEADER_SIZE = 2;
+
+    /// <summary>
+    /// Peeks the type from the packet buffer.
+    /// </summary>
     internal static NetPacketType GetType(byte[] buffer)
     {
       return (NetPacketType)buffer[0];
@@ -37,11 +46,14 @@ namespace MiniUDP
     internal static int PackPayload(
       byte[] buffer,
       ushort sequence,
-      byte[] dataBuffer,
-      int dataLength)
+      byte[] data,
+      ushort dataLength)
     {
-      int position = NetEncoding.PackPayloadHeader(buffer, sequence);
-      Array.Copy(dataBuffer, 0, buffer, position, dataLength);
+      buffer[0] = (byte)NetPacketType.Payload;
+      NetEncoding.PackU16(buffer, 1, sequence);
+      int position = NetEncoding.PAYLOAD_HEADER_SIZE;
+
+      Array.Copy(data, 0, buffer, position, dataLength);
       return position + dataLength;
     }
 
@@ -49,48 +61,65 @@ namespace MiniUDP
     /// Reads payload data from the given buffer.
     /// </summary>
     internal static bool ReadPayload(
+      Func<NetEventType, NetPeer, NetEvent> eventFactory,
+      NetPeer peer,
       byte[] buffer,
       int length,
       out ushort sequence,
-      byte[] dataBuffer,
-      out int dataLength)
+      out NetEvent evnt)
     {
-      dataLength = 0;
-      int position = NetEncoding.ReadPayloadHeader(buffer, out sequence);
+      evnt = null;
 
-      if (position > length)
-      {
-        NetDebug.LogError("Bad packet length");
+      // Read header (already know the type)
+      sequence = NetEncoding.ReadU16(buffer, 1);
+      int position = NetEncoding.PAYLOAD_HEADER_SIZE;
+
+      int maxSize = NetConfig.MAX_DATA_SIZE;
+      ushort dataLength = (ushort)(length - position);
+      if (((position + dataLength) > length) || (dataLength > maxSize))
         return false;
-      }
 
-      dataLength = length - position;
-      Array.Copy(buffer, position, dataBuffer, 0, dataLength);
+      evnt = eventFactory.Invoke(NetEventType.Payload, peer);
+      evnt.ReadData(buffer, position, dataLength);
       return true;
     }
 
     /// <summary>
     /// Packs a series of notifications into the buffer.
     /// </summary>
-    internal static int PackNotifications(
+    internal static int PackCarrier(
       byte[] buffer,
       ushort notificationAck,
       ushort notificationSeq,
       IEnumerable<NetEvent> notifications)
     {
+      int notificationHeaderSize = NetEncoding.NOTIFICATION_HEADER_SIZE;
+
+      // Pack header
+      buffer[0] = (byte)NetPacketType.Carrier;
+      NetEncoding.PackU16(buffer, 1, notificationAck);
+      NetEncoding.PackU16(buffer, 3, notificationSeq);
+      int position = NetEncoding.CARRIER_HEADER_SIZE;
+
+      // Pack notifications
       int dataPacked = 0;
       int maxDataPack = NetConfig.MAX_NOTIFICATION_PACK;
-      int position = 
-        NetEncoding.PackNotificationHeader(
-          buffer, 
-          notificationAck, 
-          notificationSeq);
-
       foreach (NetEvent notification in notifications)
       {
-        if ((dataPacked + notification.PackSize) > maxDataPack)
+        // See if we can fit the notification
+        int packedSize = notificationHeaderSize + notification.EncodedLength;
+        if ((dataPacked + packedSize) > maxDataPack)
           break;
-        int packSize = notification.Pack(buffer, position);
+
+        // Pack the notification data
+        int packSize = 
+          NetEncoding.PackNotification(
+            buffer, 
+            position, 
+            notification.EncodedData,
+            notification.EncodedLength);
+
+        // Increment counters
         dataPacked += packSize;
         position += packSize;
       }
@@ -101,56 +130,44 @@ namespace MiniUDP
     /// <summary>
     /// Reads a collection of notifications packed in the buffer.
     /// </summary>
-    internal static bool ReadNotifications(
+    internal static bool ReadCarrier(
+      Func<NetEventType, NetPeer, NetEvent> eventFactory,
       NetPeer peer,
       byte[] buffer,
       int length,
       out ushort notificationAck,
       out ushort notificationSeq,
-      Func<NetEvent> eventFactory,
       Queue<NetEvent> destinationQueue)
     {
-      notificationAck = 0;
-      notificationSeq = 0;
+      // Read header (already know the type)
+      notificationAck = NetEncoding.ReadU16(buffer, 1);
+      notificationSeq = NetEncoding.ReadU16(buffer, 3);
+      int position = NetEncoding.CARRIER_HEADER_SIZE;
 
-      // Read the header
-      int position = 
-        NetEncoding.ReadNotificationHeader(
-          buffer, 
-          out notificationAck, 
-          out notificationSeq);
-
-      if ((length - position) > NetConfig.MAX_NOTIFICATION_PACK)
-      {
-        NetDebug.LogError("Bad packet length");
+      // Validate
+      int maxDataPack = NetConfig.MAX_NOTIFICATION_PACK;
+      if ((position > length) || ((length - position) > maxDataPack))
         return false;
-      }
-      if (position > length)
-      {
-        NetDebug.LogError("Bad packet length");
-        return false;
-      }
 
-      // Read the notifications themselves
+      // Read notifications
       while (position < length)
       {
-        NetEvent notification = eventFactory.Invoke();
-        notification.Initialize(NetEventType.Notification, peer);
-        int bytesRead = notification.Read(buffer, position, length);
-
+        NetEvent evnt = eventFactory.Invoke(NetEventType.Notification, peer);
+        int bytesRead = 
+          NetEncoding.ReadNotification(buffer, length, position, evnt);
         if (bytesRead < 0)
-        {
-          NetDebug.LogError("Error reading notification");
           return false;
-        }
 
-        destinationQueue.Enqueue(notification);
+        destinationQueue.Enqueue(evnt);
         position += bytesRead;
       }
 
       return true;
     }
 
+    /// <summary>
+    /// Packs a connect request with version and token strings.
+    /// </summary>
     internal static int PackConnectRequest(
       byte[] buffer, 
       string version,
@@ -162,57 +179,51 @@ namespace MiniUDP
       NetDebug.Assert((byte)versionBytes == versionBytes);
       NetDebug.Assert((byte)tokenBytes == tokenBytes);
 
-      int bytesPacked =
-        NetEncoding.PackProtocol(
-          buffer,
-          NetPacketType.Connect,
-          (byte)versionBytes,
-          (byte)tokenBytes);
+      // Pack header info
+      buffer[0] = (byte)NetPacketType.Connect;
+      buffer[1] = (byte)versionBytes;
+      buffer[2] = (byte)tokenBytes;
+      int position = NetEncoding.CONNECT_HEADER_SIZE;
 
-      Encoding.UTF8.GetBytes(version, 0, version.Length, buffer, bytesPacked);
-      bytesPacked += versionBytes;
-      Encoding.UTF8.GetBytes(token, 0, token.Length, buffer, bytesPacked);
-      bytesPacked += tokenBytes;
+      Encoding.UTF8.GetBytes(version, 0, version.Length, buffer, position);
+      position += versionBytes;
+      Encoding.UTF8.GetBytes(token, 0, token.Length, buffer, position);
+      position += tokenBytes;
 
-      return bytesPacked;
+      return position;
     }
 
-    internal static int ReadConnectRequest(
+    /// <summary>
+    /// Reads a packed connect request with version and token strings.
+    /// </summary>
+    internal static bool ReadConnectRequest(
       byte[] buffer, 
       out string version,
       out string token)
     {
-      byte versionBytes;
-      byte tokenBytes;
-      int headerBytes = 
-        NetEncoding.ReadProtocol(
-          buffer, 
-          out versionBytes, 
-          out tokenBytes);
-      int bytesRead = headerBytes;
+      version = "";
+      token = "";
 
       try
       {
-        version = Encoding.UTF8.GetString(buffer, bytesRead, versionBytes);
-        bytesRead += versionBytes;
-        token = Encoding.UTF8.GetString(buffer, bytesRead, tokenBytes);
-        bytesRead += versionBytes;
+        // Already know the type
+        byte versionBytes = buffer[1];
+        byte tokenBytes = buffer[2];
+        int position = NetEncoding.CONNECT_HEADER_SIZE;
 
-        return bytesRead;
+        version = Encoding.UTF8.GetString(buffer, position, versionBytes);
+        position += versionBytes;
+        token = Encoding.UTF8.GetString(buffer, position, tokenBytes);
+        return true;
       }
       catch (Exception)
       {
-        NetDebug.LogError("Error decoding connect request");
-        version = "";
-        token = "";
-        return headerBytes;
+        return false;
       }
     }
 
     // Params:
-    //    Connect: VersionLen, TokenLen
     //    Accept: 0, 0
-    //    Reject: InternalReason, 0
     //    Disconnect: InternalReason, UserReason
     //    Ping: PingSeq, Loss
     //    Pong: PingSeq, Dropped
@@ -225,64 +236,67 @@ namespace MiniUDP
       buffer[0] = (byte)type;
       buffer[1] = firstParam;
       buffer[2] = secondParam;
-      return 3;
+      return NetEncoding.PROTOCOL_HEADER_SIZE;
     }
 
-    internal static int ReadProtocol(
+    internal static bool ReadProtocol(
       byte[] buffer,
+      int length,
       out byte firstParam,
       out byte secondParam)
     {
       // Already know the type
       firstParam = buffer[1];
       secondParam = buffer[2];
-      return 3;
+
+      if (length < NetEncoding.PROTOCOL_HEADER_SIZE)
+        return false;
+      return true;
     }
 
-    internal static int PackPayloadHeader(
+    /// <summary>
+    /// Packs a notification prepended with that notification's length.
+    /// </summary>
+    private static int PackNotification(
       byte[] buffer,
-      ushort sequence)
+      int position,
+      byte[] data,
+      ushort dataLength)
     {
-      buffer[0] = (byte)NetPacketType.Payload;
-      NetEncoding.PackU16(buffer, 1, sequence);
-      return 3;
+      // For notifications we add the length since there may be multiple
+      NetEncoding.PackU16(buffer, position, dataLength);
+      position += NetEncoding.NOTIFICATION_HEADER_SIZE;
+
+      Array.Copy(data, 0, buffer, position, dataLength);
+      return NetEncoding.NOTIFICATION_HEADER_SIZE + dataLength;
     }
 
-    internal static int ReadPayloadHeader(
+    /// <summary>
+    /// Reads a length-prefixed notification block.
+    /// </summary>
+    private static int ReadNotification(
       byte[] buffer,
-      out ushort sequence)
+      int length,
+      int position,
+      NetEvent destination)
     {
-      // Already know the type
-      sequence = NetEncoding.ReadU16(buffer, 1);
-      return 3;
-    }
+      // Read the length we added
+      ushort dataLength = NetEncoding.ReadU16(buffer, position);
+      position += NetEncoding.NOTIFICATION_HEADER_SIZE;
 
-    internal static int PackNotificationHeader(
-      byte[] buffer,
-      ushort notificationAck,
-      ushort notificationSeq)
-    {
-      buffer[0] = (byte)NetPacketType.Notification;
-      NetEncoding.PackU16(buffer, 1, notificationAck);
-      NetEncoding.PackU16(buffer, 3, notificationSeq);
-      return 5;
-    }
+      // Avoid a crash if the packet is bad (or malicious)
+      if ((position + dataLength) > length)
+        return -1;
 
-    internal static int ReadNotificationHeader(
-      byte[] buffer,
-      out ushort notificationAck,
-      out ushort notificationSeq) // The sequence # of the first notification
-    {
-      // Already know the type
-      notificationAck = NetEncoding.ReadU16(buffer, 1);
-      notificationSeq = NetEncoding.ReadU16(buffer, 3);
-      return 5;
+      // Read the data into the event's buffer
+      destination.ReadData(buffer, position, dataLength);
+      return NetEncoding.NOTIFICATION_HEADER_SIZE + dataLength;
     }
 
     /// <summary>
     /// Encodes a U16 into a buffer at a location in Big Endian order.
     /// </summary>
-    internal static void PackU16(
+    private static void PackU16(
       byte[] buffer,
       int position,
       ushort value)
@@ -294,7 +308,7 @@ namespace MiniUDP
     /// <summary>
     /// Reads a U16 from a buffer at a location in Big Endian order.
     /// </summary>
-    internal static ushort ReadU16(
+    private static ushort ReadU16(
       byte[] buffer,
       int position)
     {

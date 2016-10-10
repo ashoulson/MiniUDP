@@ -149,7 +149,7 @@ namespace MiniUDP
       NetPeer peer,
       ushort sequence,
       byte[] data,
-      int length)
+      ushort length)
     {
       return this.controller.SendPayload(peer, sequence, data, length);
     }
@@ -160,7 +160,7 @@ namespace MiniUDP
     internal void QueueNotification(
       NetPeer peer,
       byte[] buffer,
-      int length)
+      ushort length)
     {
       this.controller.QueueNotification(peer, buffer, length);
     }
