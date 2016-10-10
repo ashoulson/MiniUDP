@@ -89,7 +89,6 @@ namespace MiniUDP
       NetEventType type,
       NetPeer peer,
       byte[] buffer,
-      int position,
       int length)
     {
       if (length > NetConfig.MAX_DATA_SIZE)
@@ -100,7 +99,7 @@ namespace MiniUDP
       this.EventType = type;
       this.Peer = peer;
 
-      Array.Copy(buffer, position, this.buffer, 0, length);
+      Array.Copy(buffer, this.buffer, length);
     }
 
     #region Encoding

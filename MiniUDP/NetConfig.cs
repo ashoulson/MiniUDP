@@ -51,7 +51,7 @@ namespace MiniUDP
     Ping,
     Pong,
 
-    Carrier,
+    Notification,
     Payload,
   }
 

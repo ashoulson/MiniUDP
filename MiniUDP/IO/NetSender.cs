@@ -58,7 +58,7 @@ namespace MiniUDP
       lock (this.sendLock)
       {
         int length =
-        NetEncoding.PackProtocolHeader(
+        NetEncoding.PackProtocol(
           this.sendBuffer,
           NetPacketType.Kick,
           (byte)reason,
@@ -94,7 +94,7 @@ namespace MiniUDP
       lock (this.sendLock)
       {
         int length =
-        NetEncoding.PackProtocolHeader(
+        NetEncoding.PackProtocol(
           this.sendBuffer,
           NetPacketType.Accept,
           0,
@@ -118,7 +118,7 @@ namespace MiniUDP
       lock (this.sendLock)
       {
         int length =
-        NetEncoding.PackProtocolHeader(
+        NetEncoding.PackProtocol(
           this.sendBuffer,
           NetPacketType.Kick,
           (byte)reason,
@@ -137,7 +137,7 @@ namespace MiniUDP
       lock (this.sendLock)
       {
         int length =
-        NetEncoding.PackProtocolHeader(
+        NetEncoding.PackProtocol(
           this.sendBuffer,
           NetPacketType.Ping,
           peer.GeneratePing(curTime),
@@ -157,7 +157,7 @@ namespace MiniUDP
       lock (this.sendLock)
       {
         int length =
-        NetEncoding.PackProtocolHeader(
+        NetEncoding.PackProtocol(
           this.sendBuffer,
           NetPacketType.Pong,
           pingSeq,
@@ -167,25 +167,20 @@ namespace MiniUDP
     }
 
     /// <summary>
-    /// Sends a scheduled carrier message containing ping information
-    /// and reliable messages (if any).
+    /// Sends a scheduled notification message.
     /// </summary>
-    internal SocketError SendCarrier(
+    internal SocketError SendNotifications(
       NetPeer peer)
     {
       lock (this.sendLock)
       {
-        int headerLength =
-        NetEncoding.PackCarrierHeader(
-          this.sendBuffer,
-          peer.NotificationAck,
-          peer.GetFirstSequence());
         int packedLength =
           NetEncoding.PackNotifications(
             this.sendBuffer,
-            headerLength,
+            peer.NotificationAck,
+            peer.GetFirstSequence(),
             peer.Outgoing);
-        int length = headerLength + packedLength;
+        int length = packedLength;
         return this.TrySend(peer.EndPoint, this.sendBuffer, length);
       }
     }

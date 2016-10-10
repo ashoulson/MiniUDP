@@ -51,7 +51,6 @@ namespace MiniUDP
           NetEventType.Notification,
           target,
           buffer,
-          0,
           length);
       this.notificationIn.Enqueue(notification);
     }
@@ -158,6 +157,7 @@ namespace MiniUDP
 
     private readonly Queue<NetEvent> reusableQueue;
     private readonly List<NetPeer> reusableList;
+    private readonly byte[] reusableBuffer;
 
     private long nextTick;
     private long nextLongTick;
@@ -182,6 +182,7 @@ namespace MiniUDP
 
       this.reusableQueue = new Queue<NetEvent>();
       this.reusableList = new List<NetPeer>();
+      this.reusableBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
 
       this.nextTick = 0;
       this.nextLongTick = 0;
@@ -340,7 +341,7 @@ namespace MiniUDP
       long time = this.Time;
       if (peer.HasNotifications || peer.AckRequested)
       {
-        this.sender.SendCarrier(peer);
+        this.sender.SendNotifications(peer);
         peer.AckRequested = false;
       }
       if (longTick)
@@ -431,7 +432,7 @@ namespace MiniUDP
                 this.HandlePong(peer, buffer, length);
                 break;
 
-              case NetPacketType.Carrier:
+              case NetPacketType.Notification:
                 this.HandleCarrier(peer, buffer, length);
                 break;
 
@@ -504,7 +505,7 @@ namespace MiniUDP
 
       byte rawReason;
       byte userReason;
-      NetEncoding.ReadProtocolHeader(
+      NetEncoding.ReadProtocol(
         buffer,
         out rawReason,
         out userReason);
@@ -531,7 +532,7 @@ namespace MiniUDP
       byte pingSeq;
       byte loss;
       int headerSize = 
-        NetEncoding.ReadProtocolHeader(buffer, out pingSeq, out loss);
+        NetEncoding.ReadProtocol(buffer, out pingSeq, out loss);
 
       peer.OnReceivePing(this.Time, loss);
       this.sender.SendPong(peer, pingSeq, peer.GenerateDrop());
@@ -548,7 +549,7 @@ namespace MiniUDP
       byte pongSeq;
       byte drop;
       int headerSize = 
-        NetEncoding.ReadProtocolHeader(buffer, out pongSeq, out drop);
+        NetEncoding.ReadProtocol(buffer, out pongSeq, out drop);
 
       peer.OnReceivePong(this.Time, pongSeq, drop);
     }
@@ -563,19 +564,14 @@ namespace MiniUDP
 
       ushort notificationAck;
       ushort notificationSeq;
-      int headerSize = 
-        NetEncoding.ReadCarrierHeader(
-          buffer,
-          out notificationAck,
-          out notificationSeq);
-
       this.reusableQueue.Clear();
       bool success = 
         NetEncoding.ReadNotifications(
           peer, 
-          buffer, 
-          headerSize, 
-          length, 
+          buffer,
+          length,
+          out notificationAck,
+          out notificationSeq,
           this.AllocateNotification, 
           this.reusableQueue);
       if (success == false)
@@ -600,9 +596,16 @@ namespace MiniUDP
         return;
 
       ushort payloadSeq;
-      int position = NetEncoding.ReadPayloadHeader(
-        buffer,
-        out payloadSeq);
+      int dataLength;
+      bool success = 
+        NetEncoding.ReadPayload(
+          buffer,
+          length,
+          out payloadSeq,
+          this.reusableBuffer,
+          out dataLength);
+      if (success == false)
+        return;
 
       if (peer.OnReceivePayload(this.Time, payloadSeq))
       {
@@ -611,8 +614,7 @@ namespace MiniUDP
             NetEventType.Payload, 
             peer,
             buffer,
-            position,
-            length - position));
+            dataLength));
       }
     }
     #endregion
@@ -633,7 +635,6 @@ namespace MiniUDP
       NetEventType type,
       NetPeer target,
       byte[] buffer,
-      int position,
       int length)
     {
       NetEvent evnt = this.eventPool.Allocate();
@@ -641,7 +642,6 @@ namespace MiniUDP
         type,
         target,
         buffer,
-        position,
         length);
       return evnt;
     }
