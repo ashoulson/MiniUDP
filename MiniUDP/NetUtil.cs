@@ -71,21 +71,24 @@ namespace MiniUDP
     }
 
     /// <summary>
-    /// Returns an IPv4 IP:Port string as an IPEndpoint.
+    /// Returns an IPv4 IP.IP.IP.IP string as an IPEndpoint.
     /// </summary>
-    public static IPEndPoint StringToEndPoint(string address)
+    public static IPEndPoint IPToEndPoint(string ip, int port)
     {
-      string[] split = address.Split(':');
-      string stringAddress = split[0];
-      string stringPort = split[1];
+      return new IPEndPoint(IPAddress.Parse(ip), port);
+    }
 
-      int port = int.Parse(stringPort);
-      IPAddress ipaddress = IPAddress.Parse(stringAddress);
-      IPEndPoint endpoint = new IPEndPoint(ipaddress, port);
-
-      if (endpoint == null)
-        throw new ArgumentException("Failed to parse address: " + address);
-      return endpoint;
+    /// <summary>
+    /// Returns an DNS address string as an IPEndpoint.
+    /// </summary>
+    public static IPEndPoint AddressToEndPoint(string address, int port)
+    {
+      IPAddress[] addresses = Dns.GetHostAddresses(address);
+      if (addresses.Length == 1)
+        return new IPEndPoint(addresses[0], port);
+      throw new ArgumentException(
+        "Failed to uniquely resolve address: " + 
+        address);
     }
   }
 }
