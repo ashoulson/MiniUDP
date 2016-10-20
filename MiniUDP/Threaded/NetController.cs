@@ -203,7 +203,7 @@ namespace MiniUDP
       while (this.isRunning)
       {
         this.Update();
-        Thread.Sleep(NetConfig.SleepTime);
+        Thread.Sleep(NetConfig.ThreadSleepTime);
       }
 
       // Cleanup all peers since the loop was broken
