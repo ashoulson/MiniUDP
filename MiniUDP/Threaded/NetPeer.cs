@@ -32,8 +32,6 @@ namespace MiniUDP
     Closed,
   }
 
-  public delegate void NetDataEvent(NetPeer peer, byte[] data, int dataLength);
-
   public class NetPeer
   {
     /// <summary>
@@ -42,8 +40,8 @@ namespace MiniUDP
     public object UserData { get; set; }
 
     // Data Receipt
-    public event NetDataEvent PayloadReceived;
-    public event NetDataEvent NotificationReceived;
+    public event NetPeerDataEvent PayloadReceived;
+    public event NetPeerDataEvent NotificationReceived;
 
     // Peer activity
     public event NetPeerConnectEvent PeerConnected;
