@@ -36,10 +36,18 @@ namespace MiniUDP
     byte userKickReason,
     SocketError error);
 
+  public delegate void NetPeerDataEvent(
+    NetPeer peer, 
+    byte[] data, 
+    int dataLength);
+
   public class NetCore
   {
     public event NetPeerConnectEvent PeerConnected;
     public event NetPeerCloseEvent PeerClosed;
+
+    public event NetPeerDataEvent PeerReceivedNotification;
+    public event NetPeerDataEvent PeerReceivedPayload;
 
     private readonly NetController controller;
     private Thread controllerThread;
@@ -119,10 +127,12 @@ namespace MiniUDP
 
             case NetEventType.Payload:
               peer.OnPayloadReceived(evnt.EncodedData, evnt.EncodedLength);
+              this.PeerReceivedPayload?.Invoke(peer, evnt.EncodedData, evnt.EncodedLength);
               break;
 
             case NetEventType.Notification:
               peer.OnNotificationReceived(evnt.EncodedData, evnt.EncodedLength);
+              this.PeerReceivedNotification?.Invoke(peer, evnt.EncodedData, evnt.EncodedLength);
               break;
             
             default:
