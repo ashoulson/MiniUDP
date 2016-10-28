@@ -62,7 +62,8 @@ namespace MiniUDP
     Notification,
     Payload,
 
-    PeerConnected, // Peer successfully connected and was accepted
+    // TODO: PeerConnected has two meanings (connect & accept). Is this okay?
+    PeerConnected, // We accepted a connection or our connection was accepted
     PeerClosed,    // Peer closed due to some reason (remote or local)
   }
 
