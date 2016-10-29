@@ -98,7 +98,8 @@ namespace MiniUDP
     public void Stop(int timeout = 1000)
     {
       this.controller.Stop();
-      this.controllerThread.Join(timeout);
+      if (this.controllerThread.Join(timeout) == false)
+        this.controllerThread.Abort();
       this.controller.Close();
     }
 

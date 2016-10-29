@@ -20,6 +20,7 @@
 
 using System;
 using System.Net;
+using System.Net.Sockets;
 
 namespace MiniUDP
 {
@@ -75,7 +76,19 @@ namespace MiniUDP
     /// </summary>
     public static IPEndPoint IPToEndPoint(string ip, int port)
     {
-      return new IPEndPoint(IPAddress.Parse(ip), port);
+      try
+      {
+        IPAddress address = IPAddress.Parse(ip);
+        return new IPEndPoint(address, port);
+      }
+      catch (ArgumentNullException)
+      {
+        return null;
+      }
+      catch (FormatException)
+      {
+        return null;
+      }
     }
 
     /// <summary>
@@ -83,12 +96,29 @@ namespace MiniUDP
     /// </summary>
     public static IPEndPoint AddressToEndPoint(string address, int port)
     {
-      IPAddress[] addresses = Dns.GetHostAddresses(address);
-      if (addresses.Length == 1)
-        return new IPEndPoint(addresses[0], port);
-      throw new ArgumentException(
-        "Failed to uniquely resolve address: " + 
-        address);
+      try
+      {
+        IPAddress[] addresses = Dns.GetHostAddresses(address);
+        if (addresses.Length == 1)
+          return new IPEndPoint(addresses[0], port);
+        return null;
+      }
+      catch (ArgumentNullException)
+      {
+        return null;
+      }
+      catch (ArgumentOutOfRangeException)
+      {
+        return null;
+      }
+      catch (SocketException)
+      {
+        return null;
+      }
+      catch (ArgumentException)
+      {
+        return null;
+      }
     }
   }
 }
