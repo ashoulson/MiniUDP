@@ -94,6 +94,7 @@ namespace MiniUDP
     internal void Close()
     {
       this.rawSocket.Close();
+      this.rawSocket = null;
     }
 
     /// <summary> 

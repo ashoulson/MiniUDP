@@ -95,6 +95,7 @@ namespace MiniUDP
       return pending;
     }
 
+    // TODO: Does this do enough cleanup?
     public void Stop(int timeout = 1000)
     {
       this.controller.Stop();
