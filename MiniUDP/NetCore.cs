@@ -51,6 +51,7 @@ namespace MiniUDP
 
     private readonly NetController controller;
     private Thread controllerThread;
+    private bool isStarted;
 
     public NetCore(string version, bool allowConnections)
     {
@@ -60,6 +61,7 @@ namespace MiniUDP
         throw new ApplicationException("Version string too long");
 
       this.controller = new NetController(version, allowConnections);
+      this.isStarted = false;
     }
 
     public NetPeer Connect(IPEndPoint endpoint, string token)
@@ -81,6 +83,7 @@ namespace MiniUDP
         new Thread(new ThreadStart(this.controller.Start));
       this.controllerThread.IsBackground = true;
       this.controllerThread.Start();
+      this.isStarted = true;
     }
 
     public NetPeer AddConnection(IPEndPoint endpoint, string token)
@@ -98,10 +101,13 @@ namespace MiniUDP
     // TODO: Does this do enough cleanup?
     public void Stop(int timeout = 1000)
     {
-      this.controller.Stop();
-      if (this.controllerThread.Join(timeout) == false)
-        this.controllerThread.Abort();
-      this.controller.Close();
+      if (this.isStarted)
+      {
+        this.controller.Stop();
+        if (this.controllerThread.Join(timeout) == false)
+          this.controllerThread.Abort();
+        this.controller.Close();
+      }
     }
 
     public void PollEvents()
