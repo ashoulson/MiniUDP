@@ -72,7 +72,7 @@ namespace MiniUDP
     #region Timing
     public static int ShortTickRate = 250;
     public static int LongTickRate = 1000;
-    public static int ThreadSleepTime = 1;
+    public static int ThreadSleepTime = 5;
     public static long ConnectionTimeOut = 10000;
     #endregion
 
