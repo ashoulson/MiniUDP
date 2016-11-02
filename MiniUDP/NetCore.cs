@@ -19,21 +19,21 @@
 */
 
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
 
 namespace MiniUDP
 {
   public delegate void NetPeerConnectEvent(
-    NetPeer peer, 
-    string token);
+    NetPeer peer);
 
   public delegate void NetPeerCloseEvent(
     NetPeer peer,
-    NetCloseReason reason,
-    byte userKickReason,
+    NetCloseReason closeReason,
+    byte userReason,
     SocketError error);
 
   public delegate void NetPeerDataEvent(
@@ -45,123 +45,497 @@ namespace MiniUDP
   {
     public event NetPeerConnectEvent PeerConnected;
     public event NetPeerCloseEvent PeerClosed;
-
-    public event NetPeerDataEvent PeerReceivedNotification;
+    public event NetPeerDataEvent PeerReceivedMessage;
     public event NetPeerDataEvent PeerReceivedPayload;
 
-    private readonly NetController controller;
-    private Thread controllerThread;
-    private bool isStarted;
+    private bool IsFull { get { return false; } } // TODO: Keep a count
+    private long Time { get { return this.timer.ElapsedMilliseconds; } }
+
+    private readonly NetPool<NetMessage> messagePool;
+    private readonly Dictionary<IPEndPoint, NetPeer> peers;
+    private readonly Stopwatch timer;
+    private readonly NetSocket socket;
+    private readonly NetSender sender;
+    private readonly NetReceiver receiver;
+
+    private readonly Queue<NetMessage> reusableQueue;
+    private readonly List<NetPeer> reusableList;
+    private readonly byte[] reusableBuffer;
+
+    private readonly string version;
+    private readonly bool allowConnections;
+
+    private long nextTick;
+    private long nextLongTick;
+    private bool isShutdown;
+    private bool isBound;
 
     public NetCore(string version, bool allowConnections)
     {
-      if (version == null)
-        version = "";
       if (Encoding.UTF8.GetByteCount(version) > NetConfig.MAX_VERSION_BYTES)
         throw new ApplicationException("Version string too long");
 
-      this.controller = new NetController(version, allowConnections);
-      this.isStarted = false;
+      this.messagePool = new NetPool<NetMessage>();
+      this.peers = new Dictionary<IPEndPoint, NetPeer>();
+      this.timer = new Stopwatch();
+      this.socket = new NetSocket();
+      this.sender = new NetSender(this.socket);
+      this.receiver = new NetReceiver(this.socket);
+
+      this.reusableQueue = new Queue<NetMessage>();
+      this.reusableList = new List<NetPeer>();
+      this.reusableBuffer = new byte[NetConfig.SOCKET_BUFFER_SIZE];
+
+      this.version = version;
+      this.allowConnections = allowConnections;
+
+      this.nextTick = 0;
+      this.nextLongTick = 0;
+      this.isShutdown = false;
+      this.isBound = false;
+
+      // Start the timer and get ready
+      this.timer.Start();
     }
 
-    public NetPeer Connect(IPEndPoint endpoint, string token)
+    #region Session Control
+    /// <summary>
+    /// Optionally binds our socket to receive incoming connections.
+    /// </summary>
+    public void Bind(int port)
     {
-      NetPeer peer = this.AddConnection(endpoint, token);
-      this.Start();
-      return peer;
+      if (this.isShutdown)
+        throw new InvalidOperationException("NetCore has been shut down");
+      if (this.isBound)
+        throw new InvalidOperationException("NetCore has already been bound");
+
+      this.socket.Bind(port);
+      this.isBound = true;
     }
 
-    public void Host(int port)
+    /// <summary>
+    /// Begins establishing a connection to a remote host.
+    /// Returns the peer representing this pending connection.
+    /// </summary>
+    public NetPeer Connect(IPEndPoint endPoint, string token)
     {
-      this.controller.Bind(port);
-      this.Start();
-    }
-
-    private void Start()
-    {
-      this.controllerThread = 
-        new Thread(new ThreadStart(this.controller.Start));
-      this.controllerThread.IsBackground = true;
-      this.controllerThread.Start();
-      this.isStarted = true;
-    }
-
-    public NetPeer AddConnection(IPEndPoint endpoint, string token)
-    {
+      if (this.isShutdown)
+        throw new InvalidOperationException("NetCore has been shut down");
+      if (this.peers.ContainsKey(endPoint))
+        throw new InvalidOperationException("Connecting to existing peer");
       if (token == null)
-        token = "";
+        throw new ArgumentNullException("Token string is null");
       if (Encoding.UTF8.GetByteCount(token) > NetConfig.MAX_TOKEN_BYTES)
         throw new ApplicationException("Token string too long");
 
-      NetPeer pending = this.controller.BeginConnect(endpoint, token);
-      pending.SetCore(this);
+      NetPeer pending = new NetPeer(this, false, endPoint, token, this.Time);
+      this.peers.Add(pending.EndPoint, pending);
       return pending;
     }
 
-    // TODO: Does this do enough cleanup?
-    public void Stop(int timeout = 1000)
+    /// <summary>
+    /// Shuts down the network, disconnects all peers, and cleans up.
+    /// The network cannot be used or restarted again after this.
+    /// </summary>
+    public void Shutdown()
     {
-      if (this.isStarted)
-      {
-        this.controller.Stop();
-        if (this.controllerThread.Join(timeout) == false)
-          this.controllerThread.Abort();
-        this.controller.Close();
-      }
+      this.ShutdownPeers();
+      this.sender.Flush();
+      this.socket.Close();
+
+      this.isShutdown = true;
+      this.Cleanup();
     }
 
-    public void PollEvents()
+    /// <summary>
+    /// Primary update logic. Iterates through and manages all peers.
+    /// </summary>
+    public void Update()
     {
-      NetEvent evnt;
-      while (this.controller.TryReceiveEvent(out evnt))
+#if DEBUG
+      this.receiver.Update();
+#endif
+      this.ReadPackets();
+
+      bool longTick;
+      if (this.TickAvailable(out longTick))
       {
-        NetPeer peer = evnt.Peer;
-
-        // No events should fire if the user closed the peer
-        if (peer.ClosedByUser == false)
+        foreach (NetPeer peer in this.peers.Values)
         {
-          switch (evnt.EventType)
+          peer.Update(this.Time);
+          switch (peer.Status)
           {
-            case NetEventType.PeerConnected:
-              peer.SetCore(this);
-              peer.OnPeerConnected();
-              this.PeerConnected?.Invoke(peer, peer.Token);
+            case NetPeerStatus.Connecting:
+              this.UpdateConnecting(peer);
               break;
 
-            case NetEventType.PeerClosed:
-              peer.OnPeerClosed(evnt.CloseReason, evnt.UserKickReason, evnt.SocketError);
-              this.PeerClosed?.Invoke(peer, evnt.CloseReason, evnt.UserKickReason, evnt.SocketError);
+            case NetPeerStatus.Connected:
+              this.UpdateConnected(peer, longTick);
               break;
 
-            case NetEventType.Payload:
-              peer.OnPayloadReceived(evnt.EncodedData, evnt.EncodedLength);
-              this.PeerReceivedPayload?.Invoke(peer, evnt.EncodedData, evnt.EncodedLength);
-              break;
-
-            case NetEventType.Notification:
-              peer.OnNotificationReceived(evnt.EncodedData, evnt.EncodedLength);
-              this.PeerReceivedNotification?.Invoke(peer, evnt.EncodedData, evnt.EncodedLength);
-              break;
-            
             default:
-              throw new NotImplementedException();
+              NetDebug.LogError("Invalid peer state");
+              break;
           }
         }
+      }
 
-        this.controller.RecycleEvent(evnt);
+#if DEBUG
+      this.sender.Update();
+#endif
+    }
+    #endregion
+
+    #region Socket I/O
+    /// <summary>
+    /// Polls the socket and receives all pending packet data.
+    /// </summary>
+    private void ReadPackets()
+    {
+      for (int i = 0; i < NetConfig.MaxPacketReads; i++)
+      {
+        IPEndPoint source;
+        byte[] buffer;
+        int length;
+        SocketError result =
+          this.receiver.TryReceive(out source, out buffer, out length);
+        if (NetSocket.Succeeded(result) == false)
+          return;
+
+        NetPacketType type = NetEncoding.GetType(buffer);
+        if (type == NetPacketType.Connect)
+        {
+          // We don't have a peer yet -- special case
+          this.HandleConnectRequest(source, buffer, length);
+        }
+        else
+        {
+          NetPeer peer;
+          if (this.peers.TryGetValue(source, out peer))
+          {
+            switch (type)
+            {
+              case NetPacketType.Accept:
+                this.HandleConnectAccept(peer, buffer, length);
+                break;
+
+              case NetPacketType.Kick:
+                this.HandleKick(peer, buffer, length);
+                break;
+
+              case NetPacketType.Ping:
+                this.HandlePing(peer, buffer, length);
+                break;
+
+              case NetPacketType.Pong:
+                this.HandlePong(peer, buffer, length);
+                break;
+
+              case NetPacketType.Carrier:
+                this.HandleCarrier(peer, buffer, length);
+                break;
+
+              case NetPacketType.Payload:
+                this.HandlePayload(peer, buffer, length);
+                break;
+            }
+          }
+        }
       }
     }
 
     /// <summary>
-    /// Immediately sends out a disconnect message to a peer.
+    /// Handles an incoming payload.
     /// </summary>
-    internal void SendKick(NetPeer peer, byte reason)
+    private void HandlePayload(
+      NetPeer peer,
+      byte[] buffer,
+      int length)
     {
-      this.controller.SendKick(peer, reason);
+      if (peer.IsConnected == false)
+        return;
+
+      // Read the payload
+      ushort payloadSeq;
+      ushort dataLength;
+      bool success =
+        NetEncoding.ReadPayload(
+          peer,
+          buffer,
+          length,
+          this.reusableBuffer,
+          out dataLength,
+          out payloadSeq);
+
+      // Validate
+      if (success == false)
+      {
+        NetDebug.LogNotify("Can't read payload from " + peer.EndPoint);
+        return;
+      }
+
+      // Send out the payload received event if the peer accepts it
+      if (peer.RecordPayload(this.Time, payloadSeq))
+      {
+        peer.HandlePayload(this.reusableBuffer, dataLength);
+        this.PeerReceivedPayload?.Invoke(
+          peer,
+          this.reusableBuffer,
+          dataLength);
+      }
     }
 
     /// <summary>
-    /// Immediately sends out a payload to a peer.
+    /// Handles an incoming carrier packet containing message info.
+    /// </summary>
+    private void HandleCarrier(
+      NetPeer peer,
+      byte[] buffer,
+      int length)
+    {
+      if (peer.IsConnected == false)
+        return;
+
+      // Read the carrier and messages
+      ushort messageAck;
+      ushort messageSeq;
+      this.reusableQueue.Clear();
+      bool success =
+        NetEncoding.ReadCarrier(
+          this.CreateMessage,
+          peer,
+          buffer,
+          length,
+          out messageAck,
+          out messageSeq,
+          this.reusableQueue);
+
+      // Validate
+      if (success == false)
+      {
+        NetDebug.LogNotify("Can't read carrier from " + peer.EndPoint);
+        return;
+      }
+
+      long curTime = this.Time;
+      peer.RecordCarrier(curTime, messageAck);
+
+      // The packet contains the first sequence number. All subsequent
+      // messages have sequence numbers in order, so we just increment.
+      foreach (NetMessage message in this.reusableQueue)
+      {
+        if (peer.RecordMessage(curTime, messageSeq++))
+        {
+          peer.HandleMessage(message);
+          this.PeerReceivedMessage?.Invoke(
+            peer, 
+            message.EncodedData, 
+            message.EncodedLength);
+        }
+        this.RecycleMessage(message);
+      }
+    }
+
+    /// <summary>
+    /// Handles an incoming connection request packet from a remote peer.
+    /// </summary>
+    private void HandleConnectRequest(
+      IPEndPoint source,
+      byte[] buffer,
+      int length)
+    {
+      string version;
+      string token;
+      bool success =
+        NetEncoding.ReadConnectRequest(
+          buffer,
+          out version,
+          out token);
+
+      // Validate
+      if (success == false)
+      {
+        NetDebug.LogNotify("Can't read connect from " + source);
+        return;
+      }
+
+      if (this.ShouldCreatePeer(source, version))
+      {
+        // Create, add, and accept the new peer as a client
+        NetPeer peer = new NetPeer(this, true, source, token, this.Time);
+        this.peers.Add(source, peer);
+        this.sender.SendAccept(peer);
+
+        // Send out appropriate events
+        this.PeerConnected?.Invoke(peer);
+      }
+    }
+
+    /// <summary>
+    /// Handles an incoming connection accept packet.
+    /// </summary>
+    private void HandleConnectAccept(
+      NetPeer peer,
+      byte[] buffer,
+      int length)
+    {
+      if (peer.RemoteIsClient)
+      {
+        NetDebug.LogNotify("Ignored connect accept from " + peer.EndPoint);
+        return;
+      }
+
+      if (peer.IsConnected)
+        return;
+
+      // Send out appropriate events
+      peer.RecordOther(this.Time);
+      peer.HandleConnected();
+      this.PeerConnected?.Invoke(peer);
+    }
+
+    /// <summary>
+    /// Handles an incoming remote kick packet.
+    /// </summary>
+    private void HandleKick(
+      NetPeer peer,
+      byte[] buffer,
+      int length)
+    {
+      if (peer.IsClosed)
+        return;
+
+      byte rawReason;
+      byte userReason;
+      bool success =
+        NetEncoding.ReadProtocol(
+          buffer,
+          length,
+          out rawReason,
+          out userReason);
+
+      // Validate
+      if (success == false)
+      {
+        NetDebug.LogNotify("Can't read kick from " + peer.EndPoint);
+        return;
+      }
+
+      NetCloseReason closeReason = (NetCloseReason)rawReason;
+      // Skip the packet if it's a bad reason (this will cause error output)
+      if (NetUtil.ValidateKickReason(closeReason) == NetCloseReason.INVALID)
+        return;
+
+      this.RemovePeer(peer);
+      peer.RecordOther(this.Time);
+      peer.HandleClosed(closeReason, userReason);
+      this.PeerClosed?.Invoke(
+        peer, 
+        closeReason, 
+        userReason, 
+        SocketError.SocketError);
+    }
+
+    /// <summary>
+    /// Handles an incoming ping packet.
+    /// </summary>
+    private void HandlePing(
+      NetPeer peer,
+      byte[] buffer,
+      int length)
+    {
+      if (peer.IsConnected == false)
+        return;
+
+      byte pingSeq;
+      byte loss;
+      bool success =
+        NetEncoding.ReadProtocol(
+          buffer,
+          length,
+          out pingSeq,
+          out loss);
+
+      // Validate
+      if (success == false)
+      {
+        NetDebug.LogNotify("Can't read ping from " + peer.EndPoint);
+        return;
+      }
+
+      peer.RecordPing(this.Time, loss);
+      this.sender.SendPong(peer, pingSeq, peer.GetDropByte());
+    }
+
+    /// <summary>
+    /// Handles an incoming pong packet.
+    /// </summary>
+    private void HandlePong(
+      NetPeer peer,
+      byte[] buffer,
+      int length)
+    {
+      if (peer.IsConnected == false)
+        return;
+
+      byte pongSeq;
+      byte drop;
+      bool success =
+        NetEncoding.ReadProtocol(
+          buffer,
+          length,
+          out pongSeq,
+          out drop);
+
+      // Validate
+      if (success == false)
+      {
+        NetDebug.LogNotify("Can't read pong from " + peer.EndPoint);
+        return;
+      }
+
+      peer.RecordPong(this.Time, pongSeq, drop);
+    }
+    #endregion
+
+    #region Event Allocation and Deallocation
+    /// <summary>
+    /// Creates an empty message.
+    /// </summary>
+    private NetMessage CreateMessage(
+      NetPeer target)
+    {
+      NetMessage message = this.messagePool.Allocate();
+      message.Initialize(target);
+      return message;
+    }
+
+    /// <summary>
+    /// Creates a message with the given data.
+    /// </summary>
+    internal NetMessage CreateMessage(
+      NetPeer target,
+      byte[] buffer,
+      ushort length)
+    {
+      NetMessage message = this.CreateMessage(target);
+      if (message.ReadData(buffer, 0, length) == false)
+        throw new OverflowException("Data too long for message");
+      return message;
+    }
+
+    /// <summary>
+    /// Deallocates a created message.
+    /// </summary>
+    internal void RecycleMessage(NetMessage message)
+    {
+      this.messagePool.Deallocate(message);
+    }
+    #endregion
+
+    #region Data Sending
+    /// <summary>
+    /// Immediately sends out a payload packet to a peer.
     /// </summary>
     internal SocketError SendPayload(
       NetPeer peer,
@@ -169,18 +543,162 @@ namespace MiniUDP
       byte[] data,
       ushort length)
     {
-      return this.controller.SendPayload(peer, sequence, data, length);
+      return this.sender.SendPayload(peer, sequence, data, length);
+    }
+    #endregion
+
+    #region Peer Management
+    internal void HandlePeerClosedByUser(NetPeer peer, byte userReason)
+    {
+      if (userReason != NetConfig.DONT_NOTIFY_PEER)
+        this.sender.SendKick(peer, NetCloseReason.KickUserReason, userReason);
+
+      this.RemovePeer(peer);
+      peer.HandleClosed(
+        NetCloseReason.KickUserReason,
+        userReason,
+        SocketError.SocketError);
+    }
+
+    private void RemovePeer(NetPeer peer)
+    {
+      this.peers.Remove(peer.EndPoint);
     }
 
     /// <summary>
-    /// Adds an outgoing notification to the controller processing queue.
+    /// Updates a peer with an active connection.
     /// </summary>
-    internal void QueueNotification(
-      NetPeer peer,
-      byte[] buffer,
-      ushort length)
+    private void UpdateConnected(NetPeer peer, bool longTick)
     {
-      this.controller.QueueNotification(peer, buffer, length);
+      if (this.PeerTimeout(peer, true))
+        return;
+
+      long time = this.Time;
+      if (peer.HasMessages || peer.AckRequested)
+      {
+        this.sender.SendMessages(peer);
+        peer.AckRequested = false;
+      }
+      if (longTick)
+      {
+        this.sender.SendPing(peer, this.Time);
+      }
     }
+
+    /// <summary>
+    /// Updates a peer that is attempting to connect.
+    /// </summary>
+    private void UpdateConnecting(NetPeer peer)
+    {
+      if (this.PeerTimeout(peer, false))
+        return;
+
+      this.sender.SendConnect(peer, this.version);
+    }
+
+    /// <summary>
+    /// Checks if a peer has timed out. If so, closes that peer and optionally
+    /// sends out a corresponding kick packet.
+    /// </summary>
+    private bool PeerTimeout(NetPeer peer, bool sendKick)
+    {
+      NetDebug.Assert(peer.IsClosed == false, "peer.IsClosed");
+
+      if (peer.GetTimeSinceRecv(this.Time) <= NetConfig.ConnectionTimeOut)
+        return false;
+
+      if (sendKick)
+        this.sender.SendKick(peer, NetCloseReason.KickTimeout);
+      this.RemovePeer(peer);
+      peer.HandleClosed(NetCloseReason.LocalTimeout);
+      return true;
+    }
+    #endregion
+
+    #region Helpers
+    /// <summary>
+    /// Closes all peers and removes them from the dictionary.
+    /// </summary>
+    private void ShutdownPeers()
+    {
+      this.reusableList.Clear();
+      this.reusableList.AddRange(this.peers.Values);
+      this.peers.Clear();
+
+      foreach (NetPeer peer in this.reusableList)
+      {
+        if (peer.IsOpen)
+          this.sender.SendKick(peer, NetCloseReason.KickShutdown);
+        SocketError error = SocketError.SocketError;
+        peer.HandleClosed(NetCloseReason.LocalShutdown, 0, error);
+      }
+    }
+
+    /// <summary>
+    /// Cleans up all residual data.
+    /// </summary>
+    private void Cleanup()
+    {
+      this.timer.Reset();
+      this.reusableQueue.Clear();
+      this.reusableList.Clear();
+    }
+
+    /// <summary>
+    /// Returns true iff it's time for a tick, or a long tick.
+    /// </summary>
+    private bool TickAvailable(out bool longTick)
+    {
+      longTick = false;
+      long currentTime = this.Time;
+      if (currentTime >= this.nextTick)
+      {
+        this.nextTick = currentTime + NetConfig.ShortTickRate;
+        if (currentTime >= this.nextLongTick)
+        {
+          longTick = true;
+          this.nextLongTick = currentTime + NetConfig.LongTickRate;
+        }
+        return true;
+      }
+      return false;
+    }
+
+    /// <summary>
+    /// Whether or not we should accept a connection before consulting
+    /// the application for the final verification step.
+    /// </summary>
+    private bool ShouldCreatePeer(
+      IPEndPoint source,
+      string version)
+    {
+      NetPeer peer;
+      if (this.peers.TryGetValue(source, out peer))
+      {
+        this.sender.SendAccept(peer);
+        return false;
+      }
+
+      if (this.allowConnections == false)
+      {
+        this.sender.SendReject(source, NetCloseReason.RejectNotHost);
+        return false;
+      }
+
+      if (this.IsFull)
+      {
+        this.sender.SendReject(source, NetCloseReason.RejectFull);
+        return false;
+      }
+
+      if (this.version != version)
+      {
+        this.sender.SendReject(source, NetCloseReason.RejectVersion);
+        return false;
+      }
+
+      return true;
+    }
+    #endregion
   }
 }

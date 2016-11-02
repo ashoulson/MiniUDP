@@ -24,8 +24,7 @@ using System.Net.Sockets;
 namespace MiniUDP
 {
   /// <summary>
-  /// A class for receiving and buffering data from a socket. Note that this
-  /// class is NOT thread safe and must not be shared across threads.
+  /// A class for receiving and buffering data from a socket.
   /// </summary>
   internal class NetReceiver
   {

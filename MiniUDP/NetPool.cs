@@ -46,9 +46,8 @@ namespace MiniUDP
 
     public T Allocate()
     {
-      lock(this.freeList)
-        if (this.freeList.Count > 0)
-          return this.freeList.Pop();
+      if (this.freeList.Count > 0)
+        return this.freeList.Pop();
 
       T obj = new T();
       obj.Reset();
@@ -58,8 +57,7 @@ namespace MiniUDP
     public void Deallocate(T obj)
     {
       obj.Reset();
-      lock(this.freeList)
-        this.freeList.Push(obj);
+      this.freeList.Push(obj);
     }
   }
 }
