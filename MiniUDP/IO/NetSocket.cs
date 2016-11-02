@@ -23,10 +23,6 @@ using System.Net.Sockets;
 
 namespace MiniUDP
 {
-  /// <summary>
-  /// Since raw sockets are thread safe, we use a global socket singleton
-  /// between the two threads for the sake of convenience.
-  /// </summary>
   internal class NetSocket
   {
     public static bool Succeeded(SocketError error)
@@ -39,16 +35,10 @@ namespace MiniUDP
       return (error == SocketError.NoData);
     }
 
-    // https://msdn.microsoft.com/en-us/library/system.net.sockets.socket.aspx
-    // We don't need a lock for writing, but we do for reading because polling
-    // and receiving are two different non-atomic actions. In practice we
-    // should only ever be reading from the socket on one thread anyway.
-    private object readLock;
     private Socket rawSocket;
 
     internal NetSocket()
     {
-      this.readLock = new object();
       this.rawSocket =
         new Socket(
           AddressFamily.InterNetwork,
@@ -72,8 +62,8 @@ namespace MiniUDP
       }
       catch
       {
-        // Not always supported
-        NetDebug.LogWarning(
+        // Not always supported, but also not critical
+        NetDebug.LogNotify(
           "Failed to set control code for ignoring ICMP port unreachable.");
       }
     }
@@ -121,7 +111,6 @@ namespace MiniUDP
       catch (SocketException exception)
       {
         NetDebug.LogError("Send failed: " + exception.Message);
-        NetDebug.LogError(exception.StackTrace);
         return exception.SocketErrorCode;
       }
     }
@@ -138,36 +127,32 @@ namespace MiniUDP
       source = null;
       length = 0;
 
-      lock (this.readLock)
+      if (this.rawSocket.Poll(0, SelectMode.SelectRead) == false)
+        return SocketError.NoData;
+
+      try
       {
-        if (this.rawSocket.Poll(0, SelectMode.SelectRead) == false)
-          return SocketError.NoData;
+        EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
 
-        try
+        length =
+          this.rawSocket.ReceiveFrom(
+            destBuffer,
+            destBuffer.Length,
+            SocketFlags.None,
+            ref endPoint);
+
+        if (length > 0)
         {
-          EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
-
-          length =
-            this.rawSocket.ReceiveFrom(
-              destBuffer,
-              destBuffer.Length,
-              SocketFlags.None,
-              ref endPoint);
-
-          if (length > 0)
-          {
-            source = endPoint as IPEndPoint;
-            return SocketError.Success;
-          }
-
-          return SocketError.NoData;
+          source = endPoint as IPEndPoint;
+          return SocketError.Success;
         }
-        catch (SocketException exception)
-        {
-          NetDebug.LogError("Receive failed: " + exception.Message);
-          NetDebug.LogError(exception.StackTrace);
-          return exception.SocketErrorCode;
-        }
+
+        return SocketError.NoData;
+      }
+      catch (SocketException exception)
+      {
+        NetDebug.LogError("Receive failed: " + exception.Message);
+        return exception.SocketErrorCode;
       }
     }
   }

@@ -18,6 +18,8 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
+using System.Net.Sockets;
+
 namespace MiniUDP
 {
   /// <summary>
@@ -55,29 +57,15 @@ namespace MiniUDP
     Payload,
   }
 
-  internal enum NetEventType : byte
-  {
-    INVALID = 0,
-
-    Notification,
-    Payload,
-
-    // TODO: PeerConnected has two meanings (connect & accept). Is this okay?
-    PeerConnected, // We accepted a connection or our connection was accepted
-    PeerClosed,    // Peer closed due to some reason (remote or local)
-  }
-
   public class NetConfig
   {
     #region Timing
     public static int ShortTickRate = 250;
     public static int LongTickRate = 1000;
-    public static int ThreadSleepTime = 5;
     public static long ConnectionTimeOut = 10000;
     #endregion
 
     #region Counts
-    public static int MaxPendingNotifications = 100;
     public static int MaxPacketReads = 50;
     #endregion
 
@@ -111,6 +99,7 @@ namespace MiniUDP
 
     internal const byte DONT_NOTIFY_PEER = 0;
     internal const byte DEFAULT_USER_REASON = 255;
+    internal const SocketError DEFAULT_ERROR = SocketError.SocketError;
     #endregion
   }
 }

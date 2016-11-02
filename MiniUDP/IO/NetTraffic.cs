@@ -226,7 +226,6 @@ namespace MiniUDP
       return -1.0f;
     }
 
-    // May be accessed from main thread
     public float Ping { get; private set; }
     public float LocalLoss { get; private set; }
     public float RemoteLoss { get; private set; }
@@ -235,10 +234,10 @@ namespace MiniUDP
     public long TimeSinceCreation { get; private set; }
     public long TimeSinceReceive { get; private set; }
     public long TimeSincePayload { get; private set; }
-    public long TimeSinceNotification { get; private set; }
+    public long TimeSinceMessage { get; private set; }
     public long TimeSincePong { get; private set; }
 
-    internal ushort NotificationAck { get { return this.notificationAck; } }
+    internal ushort MessageAck { get { return this.messageAck; } }
 
     private readonly SequenceCounter payloadLoss;
     private readonly SequenceCounter payloadDrop;
@@ -247,12 +246,12 @@ namespace MiniUDP
     private readonly long creationTime;
 
     private ushort lastPayloadSeq;
-    private ushort notificationAck;
+    private ushort messageAck;
     private int pingWindowIndex;
 
     private long lastPacketRecvTime; // Time we last received anything
     private long lastPayloadRecvTime;
-    private long lastNotificationRecvTime;
+    private long lastMessageRecvTime;
     private long lastPongRecvTime;
 
     internal NetTraffic(long creationTime)
@@ -264,12 +263,12 @@ namespace MiniUDP
       this.creationTime = creationTime;
 
       this.lastPayloadSeq = ushort.MaxValue; // "-1"
-      this.notificationAck = 0;
+      this.messageAck = 0;
       this.pingWindowIndex = 0;
 
       this.lastPacketRecvTime = creationTime;
       this.lastPayloadRecvTime = creationTime;
-      this.lastNotificationRecvTime = creationTime;
+      this.lastMessageRecvTime = creationTime;
       this.lastPongRecvTime = creationTime;
 
       for (int i = 0; i < this.pingWindow.Length; i++)
@@ -281,7 +280,7 @@ namespace MiniUDP
       this.TimeSinceCreation = curTime - this.creationTime;
       this.TimeSinceReceive = curTime - this.lastPacketRecvTime;
       this.TimeSincePayload = curTime - this.lastPayloadRecvTime;
-      this.TimeSinceNotification = curTime - this.lastNotificationRecvTime;
+      this.TimeSinceMessage = curTime - this.lastMessageRecvTime;
       this.TimeSincePong = curTime - this.lastPongRecvTime;
 
       if (this.TimeSincePong > (this.pingWindow.Length * 1000))
@@ -321,7 +320,7 @@ namespace MiniUDP
     {
       this.lastPacketRecvTime = curTime;
 
-      // Recompute since it may be read on the main thread
+      // Update statistics
       this.RemoteLoss = loss / (float)NetTraffic.LOSS_BITS;
     }
 
@@ -345,7 +344,7 @@ namespace MiniUDP
       this.pingWindowIndex = 
         (this.pingWindowIndex + 1) % this.pingWindow.Length;
 
-      // Recompute since it may be read on the main thread
+      // Update statistics
       this.Ping = NetTraffic.PingAverage(this.pingWindow);
       this.RemoteDrop = drop / (float)NetTraffic.LOSS_BITS;
     }
@@ -371,25 +370,25 @@ namespace MiniUDP
         this.payloadDrop.Store(payloadSeq);
       }
 
-      // Recompute since it may be read on the main thread
+      // Update statistics
       this.LocalLoss = this.GenerateLoss() / (float)NetTraffic.LOSS_BITS;
       this.LocalDrop = this.GenerateDrop() / (float)NetTraffic.LOSS_BITS;
       return isNew;
     }
 
     /// <summary>
-    /// Logs the receipt of a notification for timing and keepalive.
-    /// Returns false iff the notification is too old and should be rejected.
+    /// Logs the receipt of a message for timing and keepalive.
+    /// Returns false iff the message is too old and should be rejected.
     /// </summary>
-    internal bool OnReceiveNotification(long curTime, ushort notificationSeq)
+    internal bool OnReceiveMessage(long curTime, ushort messageSeq)
     {
       // Reject it if it's too old, including statistics for it
-      if (NetUtil.UShortSeqDiff(notificationSeq, this.NotificationAck) <= 0)
+      if (NetUtil.UShortSeqDiff(messageSeq, this.MessageAck) <= 0)
         return false;
 
-      this.notificationAck = notificationSeq;
+      this.messageAck = messageSeq;
       this.lastPacketRecvTime = curTime;
-      this.lastNotificationRecvTime = curTime;
+      this.lastMessageRecvTime = curTime;
       return true;
     }
 

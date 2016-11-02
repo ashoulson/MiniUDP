@@ -48,13 +48,11 @@
     <Compile Include="NetConfig.cs" />
     <Compile Include="NetCore.cs" />
     <Compile Include="NetDebug.cs" />
-    <Compile Include="Threaded\NetPeer.cs" />
+    <Compile Include="NetPeer.cs" />
     <Compile Include="NetPool.cs" />
     <Compile Include="IO\NetSocket.cs" />
-    <Compile Include="Threaded\NetController.cs" />
-    <Compile Include="Threaded\NetTraffic.cs" />
+    <Compile Include="IO\NetTraffic.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Threaded\NetPipeline.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
