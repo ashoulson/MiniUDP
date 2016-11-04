@@ -35,7 +35,7 @@ namespace MiniUDP
     [Conditional("DEBUG")]
     internal static void LogError(object message)
     {
-      Console.WriteLine(
+      Console.Error.WriteLine(
         "ERROR: {0} [MiniUDP]\n {1}", 
         message, 
         Environment.StackTrace);

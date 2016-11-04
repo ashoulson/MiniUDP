@@ -53,6 +53,7 @@ namespace MiniUDP
 
     private readonly NetPool<NetMessage> messagePool;
     private readonly Dictionary<IPEndPoint, NetPeer> peers;
+    private readonly HashSet<NetPeer> removePeers;
     private readonly Stopwatch timer;
     private readonly NetSocket socket;
     private readonly NetSender sender;
@@ -77,6 +78,7 @@ namespace MiniUDP
 
       this.messagePool = new NetPool<NetMessage>();
       this.peers = new Dictionary<IPEndPoint, NetPeer>();
+      this.removePeers = new HashSet<NetPeer>();
       this.timer = new Stopwatch();
       this.socket = new NetSocket();
       this.sender = new NetSender(this.socket);
@@ -155,6 +157,10 @@ namespace MiniUDP
 #if DEBUG
       this.receiver.Update();
 #endif
+      // Clean out all deferred removed peers
+      foreach (NetPeer peer in this.removePeers)
+        this.peers.Remove(peer.EndPoint);
+
       this.ReadPackets();
 
       bool longTick;
@@ -426,7 +432,6 @@ namespace MiniUDP
       if (NetUtil.ValidateKickReason(closeReason) == NetCloseReason.INVALID)
         return;
 
-      this.RemovePeer(peer);
       peer.RecordOther(this.Time);
       peer.HandleClosed(closeReason, userReason);
       this.PeerClosed?.Invoke(
@@ -434,6 +439,7 @@ namespace MiniUDP
         closeReason, 
         userReason, 
         SocketError.SocketError);
+      this.removePeers.Add(peer);
     }
 
     /// <summary>
@@ -553,16 +559,16 @@ namespace MiniUDP
       if (userReason != NetConfig.DONT_NOTIFY_PEER)
         this.sender.SendKick(peer, NetCloseReason.KickUserReason, userReason);
 
-      this.RemovePeer(peer);
       peer.HandleClosed(
         NetCloseReason.KickUserReason,
         userReason,
         SocketError.SocketError);
-    }
-
-    private void RemovePeer(NetPeer peer)
-    {
-      this.peers.Remove(peer.EndPoint);
+      this.PeerClosed?.Invoke(
+        peer,
+        NetCloseReason.KickUserReason,
+        userReason,
+        SocketError.SocketError);
+      this.removePeers.Add(peer);
     }
 
     /// <summary>
@@ -609,8 +615,13 @@ namespace MiniUDP
 
       if (sendKick)
         this.sender.SendKick(peer, NetCloseReason.KickTimeout);
-      this.RemovePeer(peer);
       peer.HandleClosed(NetCloseReason.LocalTimeout);
+      this.PeerClosed?.Invoke(
+        peer,
+        NetCloseReason.LocalTimeout,
+        NetConfig.DEFAULT_USER_REASON,
+        SocketError.SocketError);
+      this.removePeers.Add(peer);
       return true;
     }
     #endregion
@@ -624,6 +635,7 @@ namespace MiniUDP
       this.reusableList.Clear();
       this.reusableList.AddRange(this.peers.Values);
       this.peers.Clear();
+      this.removePeers.Clear();
 
       foreach (NetPeer peer in this.reusableList)
       {
