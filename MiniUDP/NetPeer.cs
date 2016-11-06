@@ -130,6 +130,7 @@ namespace MiniUDP
       if (this.IsConnected == false)
         throw new InvalidOperationException("Peer is not connected");
 
+      this.traffic.OnSendPayload(length);
       return this.core.SendPayload(this, this.payloadSeq++, data, length);
     }
 
@@ -264,9 +265,9 @@ namespace MiniUDP
     /// Returns true if we should accept the payload, false if it's too old.
     /// Does not trigger any notification events.
     /// </summary>
-    internal bool RecordPayload(long curTime, ushort sequence)
+    internal bool RecordPayload(long curTime, ushort sequence, int length)
     {
-      return this.traffic.OnReceivePayload(curTime, sequence);
+      return this.traffic.OnReceivePayload(curTime, sequence, length);
     }
 
     /// <summary>

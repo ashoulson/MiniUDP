@@ -29,6 +29,7 @@ namespace MiniUDP
   {
     internal const int LOSS_BITS = 224;
     internal const int PING_HISTORY = 64;
+    internal const int BANDWIDTH_HISTORY = 32;
 
     /// <summary>
     /// Sliding bit array keeping a history of received sequence numbers.
@@ -206,9 +207,9 @@ namespace MiniUDP
     }
 
     /// <summary>
-    /// Computes the average ping over a window.
+    /// Computes the average value over a window.
     /// </summary>
-    private static float PingAverage(int[] window)
+    private static float ComputeAverage(int[] window)
     {
       float sum = 0.0f;
       int count = 0;
@@ -226,11 +227,22 @@ namespace MiniUDP
       return -1.0f;
     }
 
+    /// <summary>
+    /// Adds to a window.
+    /// </summary>
+    private static void AddToWindow(int[] window, int value, ref int index)
+    {
+      window[index] = value;
+      index = (index + 1) % window.Length;
+    }
+
     public float Ping { get; private set; }
     public float LocalLoss { get; private set; }
     public float RemoteLoss { get; private set; }
     public float LocalDrop { get; private set; }
     public float RemoteDrop { get; private set; }
+    public float PayloadSizeOut { get; private set; }
+    public float PayloadSizeIn { get; private set; }
     public long TimeSinceCreation { get; private set; }
     public long TimeSinceReceive { get; private set; }
     public long TimeSincePayload { get; private set; }
@@ -243,11 +255,15 @@ namespace MiniUDP
     private readonly SequenceCounter payloadDrop;
     private readonly PingCounter outgoingPing;
     private readonly int[] pingWindow;
+    private readonly int[] payloadSizeIn;
+    private readonly int[] payloadSizeOut;
     private readonly long creationTime;
 
     private ushort lastPayloadSeq;
     private ushort messageAck;
     private int pingWindowIndex;
+    private int payloadInIndex;
+    private int payloadOutIndex;
 
     private long lastPacketRecvTime; // Time we last received anything
     private long lastPayloadRecvTime;
@@ -260,11 +276,15 @@ namespace MiniUDP
       this.payloadDrop = new SequenceCounter(false);
       this.outgoingPing = new PingCounter();
       this.pingWindow = new int[NetConfig.PING_SMOOTHING_WINDOW];
+      this.payloadSizeIn = new int[NetConfig.PAYLOAD_SIZE_WINDOW];
+      this.payloadSizeOut = new int[NetConfig.PAYLOAD_SIZE_WINDOW];
       this.creationTime = creationTime;
 
       this.lastPayloadSeq = ushort.MaxValue; // "-1"
       this.messageAck = 0;
       this.pingWindowIndex = 0;
+      this.payloadInIndex = 0;
+      this.payloadOutIndex = 0;
 
       this.lastPacketRecvTime = creationTime;
       this.lastPayloadRecvTime = creationTime;
@@ -273,6 +293,10 @@ namespace MiniUDP
 
       for (int i = 0; i < this.pingWindow.Length; i++)
         this.pingWindow[i] = -1;
+      for (int i = 0; i < this.payloadSizeIn.Length; i++)
+        this.payloadSizeIn[i] = 0;
+      for (int i = 0; i < this.payloadSizeOut.Length; i++)
+        this.payloadSizeOut[i] = 0;
     }
 
     internal void Update(long curTime)
@@ -340,12 +364,13 @@ namespace MiniUDP
       this.lastPacketRecvTime = curTime;
       this.lastPongRecvTime = curTime;
 
-      this.pingWindow[this.pingWindowIndex] = (int)diff;
-      this.pingWindowIndex = 
-        (this.pingWindowIndex + 1) % this.pingWindow.Length;
+      NetTraffic.AddToWindow(
+        this.pingWindow, 
+        (int)diff, 
+        ref this.pingWindowIndex);
 
       // Update statistics
-      this.Ping = NetTraffic.PingAverage(this.pingWindow);
+      this.Ping = NetTraffic.ComputeAverage(this.pingWindow);
       this.RemoteDrop = drop / (float)NetTraffic.LOSS_BITS;
     }
 
@@ -353,7 +378,10 @@ namespace MiniUDP
     /// Logs the receipt of a payload for packet loss calculation.
     /// Returns false iff the payload is too old and should be rejected.
     /// </summary>
-    internal bool OnReceivePayload(long curTime, ushort payloadSeq)
+    internal bool OnReceivePayload(
+      long curTime, 
+      ushort payloadSeq,
+      int size)
     {
       bool isNew = this.IsPayloadNew(payloadSeq);
       this.payloadLoss.Store(payloadSeq);
@@ -370,9 +398,16 @@ namespace MiniUDP
         this.payloadDrop.Store(payloadSeq);
       }
 
+      NetTraffic.AddToWindow(
+        this.payloadSizeIn,
+        size,
+        ref this.payloadInIndex);
+
       // Update statistics
       this.LocalLoss = this.GenerateLoss() / (float)NetTraffic.LOSS_BITS;
       this.LocalDrop = this.GenerateDrop() / (float)NetTraffic.LOSS_BITS;
+      this.PayloadSizeIn = NetTraffic.ComputeAverage(this.payloadSizeIn);
+
       return isNew;
     }
 
@@ -398,6 +433,15 @@ namespace MiniUDP
     internal void OnReceiveOther(long curTime)
     {
       this.lastPacketRecvTime = curTime;
+    }
+
+    internal void OnSendPayload(int size)
+    {
+      NetTraffic.AddToWindow(
+        this.payloadSizeOut, 
+        size, 
+        ref this.payloadOutIndex);
+      this.PayloadSizeOut = NetTraffic.ComputeAverage(this.payloadSizeOut);
     }
 
     /// <summary>
