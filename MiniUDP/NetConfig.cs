@@ -86,6 +86,7 @@ namespace MiniUDP
     /// Size of the window used for smoothing ping averages.
     /// </summary>
     public const int PING_SMOOTHING_WINDOW = 5;
+    public const int PAYLOAD_SIZE_WINDOW = 25;
 
     #region Packet
     internal const int SOCKET_BUFFER_SIZE = 2048;
