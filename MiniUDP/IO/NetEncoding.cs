@@ -65,7 +65,7 @@ namespace MiniUDP
     internal static bool ReadPayload(
       NetPeer peer,
       byte[] buffer,
-      int length,
+      int packetLength,
       byte[] dataBuffer,
       out ushort dataLength,
       out ushort sequence)
@@ -74,8 +74,8 @@ namespace MiniUDP
       sequence = NetEncoding.ReadU16(buffer, 1);
       int position = NetEncoding.PAYLOAD_HEADER_SIZE;
 
-      dataLength = (ushort)(length - position);
-      if ((position + dataLength) > length)
+      dataLength = (ushort)(packetLength - position);
+      if ((position + dataLength) > packetLength)
         return false; // We're reading past the end of the packet data
 
       Array.Copy(buffer, position, dataBuffer, 0, dataLength);
@@ -132,7 +132,7 @@ namespace MiniUDP
       Func<NetPeer, NetMessage> messageFactory,
       NetPeer peer,
       byte[] buffer,
-      int length,
+      int packetLength,
       out ushort messageAck,
       out ushort messageSeq,
       Queue<NetMessage> destinationQueue)
@@ -143,16 +143,16 @@ namespace MiniUDP
       int position = NetEncoding.CARRIER_HEADER_SIZE;
 
       // Validate
-      int maxDataPack = NetEncoding.MAX_MESSAGE_PACK;
-      if ((position > length) || ((length - position) > maxDataPack))
+      int maxPack = NetEncoding.MAX_MESSAGE_PACK;
+      if ((position > packetLength) || ((packetLength - position) > maxPack))
         return false;
 
       // Read messages
-      while (position < length)
+      while (position < packetLength)
       {
         NetMessage message = messageFactory.Invoke(peer);
         int bytesRead = 
-          NetEncoding.ReadMessage(buffer, length, position, message);
+          NetEncoding.ReadMessage(buffer, packetLength, position, message);
         if (bytesRead < 0)
           return false;
 
@@ -274,7 +274,7 @@ namespace MiniUDP
     /// </summary>
     private static int ReadMessage(
       byte[] buffer,
-      int length,
+      int packetLength,
       int position,
       NetMessage destination)
     {
@@ -283,7 +283,7 @@ namespace MiniUDP
       position += NetEncoding.MESSAGE_HEADER_SIZE;
 
       // Avoid a crash if the packet is bad (or malicious)
-      if ((position + dataLength) > length)
+      if ((position + dataLength) > packetLength)
         return -1;
 
       // Read the data into the message's buffer
