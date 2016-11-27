@@ -51,6 +51,9 @@ namespace MiniUDP
     private bool IsFull { get { return false; } } // TODO: Keep a count
     private long Time { get { return this.timer.ElapsedMilliseconds; } }
 
+    public NetBandwidth BandwidthOut { get { return this.sender.BandwidthOut; } }
+    public NetBandwidth BandwidthIn { get { return this.bandwidthIn; } }
+
     private readonly NetPool<NetMessage> messagePool;
     private readonly Dictionary<IPEndPoint, NetPeer> peers;
     private readonly Stopwatch timer;
@@ -64,6 +67,7 @@ namespace MiniUDP
 
     private readonly string version;
     private readonly bool allowConnections;
+    private readonly NetBandwidth bandwidthIn;
 
     private long nextTick;
     private long nextLongTick;
@@ -79,8 +83,6 @@ namespace MiniUDP
       this.peers = new Dictionary<IPEndPoint, NetPeer>();
       this.timer = new Stopwatch();
       this.socket = new NetSocket();
-      this.sender = new NetSender(this.socket);
-      this.receiver = new NetReceiver(this.socket);
 
       this.reusableQueue = new Queue<NetMessage>();
       this.activePeerList = new List<NetPeer>();
@@ -96,6 +98,12 @@ namespace MiniUDP
 
       // Start the timer and get ready
       this.timer.Start();
+
+      // Create the sender and receiver once we have time
+      this.sender = new NetSender(this.socket, this.Time);
+      this.receiver = new NetReceiver(this.socket);
+      this.bandwidthIn =
+        new NetBandwidth(NetConfig.BANDWIDTH_HISTORY, this.Time);
     }
 
     #region Session Control
@@ -152,10 +160,9 @@ namespace MiniUDP
     /// </summary>
     public void Update()
     {
-#if DEBUG
-      this.receiver.Update();
-#endif
+      this.receiver.Update(this.Time);
       this.ReadPackets();
+      this.bandwidthIn.Update(this.Time);
 
       bool longTick;
       if (this.TickAvailable(out longTick))
@@ -189,9 +196,7 @@ namespace MiniUDP
         this.activePeerList.Clear();
       }
 
-#if DEBUG
-      this.sender.Update();
-#endif
+      this.sender.Update(this.Time);
     }
     #endregion
 
@@ -225,26 +230,32 @@ namespace MiniUDP
             switch (type)
             {
               case NetPacketType.Accept:
+                this.bandwidthIn.AddOther(length);
                 this.HandleConnectAccept(peer, buffer, length);
                 break;
 
               case NetPacketType.Kick:
+                this.bandwidthIn.AddOther(length);
                 this.HandleKick(peer, buffer, length);
                 break;
 
               case NetPacketType.Ping:
+                this.bandwidthIn.AddOther(length);
                 this.HandlePing(peer, buffer, length);
                 break;
 
               case NetPacketType.Pong:
+                this.bandwidthIn.AddOther(length);
                 this.HandlePong(peer, buffer, length);
                 break;
 
               case NetPacketType.Carrier:
+                this.bandwidthIn.AddCarrier(length);
                 this.HandleCarrier(peer, buffer, length);
                 break;
 
               case NetPacketType.Payload:
+                this.bandwidthIn.AddPayload(length);
                 this.HandlePayload(peer, buffer, length);
                 break;
             }
@@ -259,7 +270,7 @@ namespace MiniUDP
     private void HandlePayload(
       NetPeer peer,
       byte[] buffer,
-      int length)
+      int packetLength)
     {
       if (peer.IsConnected == false)
         return;
@@ -271,7 +282,7 @@ namespace MiniUDP
         NetEncoding.ReadPayload(
           peer,
           buffer,
-          length,
+          packetLength,
           this.reusableBuffer,
           out dataLength,
           out payloadSeq);
@@ -284,7 +295,7 @@ namespace MiniUDP
       }
 
       // Send out the payload received event if the peer accepts it
-      if (peer.RecordPayload(this.Time, payloadSeq, dataLength))
+      if (peer.RecordPayload(this.Time, payloadSeq, packetLength))
       {
         peer.HandlePayload(this.reusableBuffer, dataLength);
         this.PeerReceivedPayload?.Invoke(
@@ -300,7 +311,7 @@ namespace MiniUDP
     private void HandleCarrier(
       NetPeer peer,
       byte[] buffer,
-      int length)
+      int packetLength)
     {
       if (peer.IsConnected == false)
         return;
@@ -314,7 +325,7 @@ namespace MiniUDP
           this.CreateMessage,
           peer,
           buffer,
-          length,
+          packetLength,
           out messageAck,
           out messageSeq,
           this.reusableQueue);
@@ -327,7 +338,7 @@ namespace MiniUDP
       }
 
       long curTime = this.Time;
-      peer.RecordCarrier(curTime, messageAck);
+      peer.RecordCarrier(curTime, messageAck, packetLength);
 
       // The packet contains the first sequence number. All subsequent
       // messages have sequence numbers in order, so we just increment.
@@ -351,7 +362,7 @@ namespace MiniUDP
     private void HandleConnectRequest(
       IPEndPoint source,
       byte[] buffer,
-      int length)
+      int packetLength)
     {
       string version;
       string token;
@@ -372,6 +383,7 @@ namespace MiniUDP
       {
         // Create, add, and accept the new peer as a client
         NetPeer peer = new NetPeer(this, true, source, token, this.Time);
+        peer.RecordOther(this.Time, packetLength);
         this.peers.Add(source, peer);
         this.sender.SendAccept(peer);
 
@@ -386,7 +398,7 @@ namespace MiniUDP
     private void HandleConnectAccept(
       NetPeer peer,
       byte[] buffer,
-      int length)
+      int packetLength)
     {
       if (peer.RemoteIsClient)
       {
@@ -398,7 +410,7 @@ namespace MiniUDP
         return;
 
       // Send out appropriate events
-      peer.RecordOther(this.Time);
+      peer.RecordOther(this.Time, packetLength);
       peer.HandleConnected();
       this.PeerConnected?.Invoke(peer);
     }
@@ -409,7 +421,7 @@ namespace MiniUDP
     private void HandleKick(
       NetPeer peer,
       byte[] buffer,
-      int length)
+      int packetLength)
     {
       if (peer.IsClosed)
         return;
@@ -419,7 +431,7 @@ namespace MiniUDP
       bool success =
         NetEncoding.ReadProtocol(
           buffer,
-          length,
+          packetLength,
           out rawReason,
           out userReason);
 
@@ -435,7 +447,7 @@ namespace MiniUDP
       if (NetUtil.ValidateKickReason(closeReason) == NetCloseReason.INVALID)
         return;
 
-      peer.RecordOther(this.Time);
+      peer.RecordOther(this.Time, packetLength);
       this.peers.Remove(peer.EndPoint);
       peer.HandleClosed(closeReason, userReason);
       this.PeerClosed?.Invoke(
@@ -451,7 +463,7 @@ namespace MiniUDP
     private void HandlePing(
       NetPeer peer,
       byte[] buffer,
-      int length)
+      int packetLength)
     {
       if (peer.IsConnected == false)
         return;
@@ -461,7 +473,7 @@ namespace MiniUDP
       bool success =
         NetEncoding.ReadProtocol(
           buffer,
-          length,
+          packetLength,
           out pingSeq,
           out loss);
 
@@ -472,7 +484,7 @@ namespace MiniUDP
         return;
       }
 
-      peer.RecordPing(this.Time, loss);
+      peer.RecordPing(this.Time, loss, packetLength);
       this.sender.SendPong(peer, pingSeq, peer.GetDropByte());
     }
 
@@ -482,7 +494,7 @@ namespace MiniUDP
     private void HandlePong(
       NetPeer peer,
       byte[] buffer,
-      int length)
+      int packetLength)
     {
       if (peer.IsConnected == false)
         return;
@@ -492,7 +504,7 @@ namespace MiniUDP
       bool success =
         NetEncoding.ReadProtocol(
           buffer,
-          length,
+          packetLength,
           out pongSeq,
           out drop);
 
@@ -503,7 +515,7 @@ namespace MiniUDP
         return;
       }
 
-      peer.RecordPong(this.Time, pongSeq, drop);
+      peer.RecordPong(this.Time, pongSeq, drop, packetLength);
     }
     #endregion
 

@@ -48,9 +48,12 @@ namespace MiniUDP
     public event NetPeerCloseEvent PeerClosed;
 
     public IPEndPoint EndPoint { get { return this.endPoint; } }
-    public NetTraffic Traffic { get { return this.traffic; } }
     public bool RemoteIsClient { get { return this.remoteIsClient; } }
     public string Token { get { return this.token; } }
+
+    public NetQuality Quality { get { return this.quality; } }
+    public NetBandwidth BandwidthIn { get { return this.bandwidthIn; } }
+    public NetBandwidth BandwidthOut { get { return this.bandwidthOut; } }
 
     public NetPeerStatus Status { get { return this.status; } }
     public bool IsConnected { get { return this.status == NetPeerStatus.Connected; } }
@@ -61,7 +64,7 @@ namespace MiniUDP
 
     internal IEnumerable<NetMessage> Outgoing { get { return this.messageOut; } }
     internal bool HasMessages { get { return (this.messageOut.Count > 0); } }
-    internal ushort MessageAck { get { return this.traffic.MessageAck; } }
+    internal ushort MessageAck { get { return this.quality.MessageAck; } }
 
     internal bool AckRequested { get; set; }
 
@@ -69,9 +72,11 @@ namespace MiniUDP
     private readonly bool remoteIsClient;
     private readonly IPEndPoint endPoint;
     private readonly string token;
-
-    private readonly NetTraffic traffic;
     private readonly Queue<NetMessage> messageOut;
+
+    private readonly NetQuality quality;
+    private readonly NetBandwidth bandwidthIn;
+    private readonly NetBandwidth bandwidthOut;
 
     private NetPeerStatus status;
     private ushort messageSeq;
@@ -91,7 +96,12 @@ namespace MiniUDP
       this.endPoint = endPoint;
       this.token = token;
 
-      this.traffic = new NetTraffic(creationTime);
+      this.bandwidthIn =
+        new NetBandwidth(NetConfig.BANDWIDTH_HISTORY, creationTime);
+      this.bandwidthOut =
+        new NetBandwidth(NetConfig.BANDWIDTH_HISTORY, creationTime);
+
+      this.quality = new NetQuality(creationTime);
       this.messageOut = new Queue<NetMessage>();
 
       if (remoteIsClient) // Clients are created in response to a connection
@@ -106,7 +116,9 @@ namespace MiniUDP
     {
       NetDebug.Assert(this.IsClosed == false, "this.IsClosed");
 
-      this.traffic.Update(curTime);
+      this.bandwidthIn.Update(curTime);
+      this.bandwidthOut.Update(curTime);
+      this.quality.Update(curTime);
     }
 
     #region I/O and Controls
@@ -129,8 +141,6 @@ namespace MiniUDP
         throw new ArgumentOutOfRangeException("length");
       if (this.IsConnected == false)
         throw new InvalidOperationException("Peer is not connected");
-
-      this.traffic.OnSendPayload(length);
       return this.core.SendPayload(this, this.payloadSeq++, data, length);
     }
 
@@ -231,7 +241,7 @@ namespace MiniUDP
     /// </summary>
     internal long GetTimeSinceRecv(long curTime)
     {
-      return this.traffic.GetTimeSinceRecv(curTime);
+      return this.quality.GetTimeSinceRecv(curTime);
     }
 
     /// <summary>
@@ -239,7 +249,7 @@ namespace MiniUDP
     /// </summary>
     internal byte CreatePing(long curTime)
     {
-      return this.traffic.GeneratePing(curTime);
+      return this.quality.GeneratePing(curTime);
     }
 
     /// <summary>
@@ -247,7 +257,7 @@ namespace MiniUDP
     /// </summary>
     internal byte GetLossByte()
     {
-      return this.traffic.GenerateLoss();
+      return this.quality.GenerateLoss();
     }
 
     /// <summary>
@@ -255,19 +265,36 @@ namespace MiniUDP
     /// </summary>
     internal byte GetDropByte()
     {
-      return this.traffic.GenerateDrop();
+      return this.quality.GenerateDrop();
     }
     #endregion
 
-    #region Metric/Sequence Recording
+    #region Incoming Metric/Sequence Recording
+    /// <summary>
+    /// Records receipt of a message and updates our ack counter. 
+    /// Return true iff the message is new.
+    /// Does not trigger any notification events.
+    /// </summary>
+    internal bool RecordMessage(
+      long curTime, 
+      ushort messageSeq)
+    {
+      this.AckRequested = true;
+      return this.quality.OnReceiveMessage(curTime, messageSeq);
+    }
+
     /// <summary>
     /// Logs the payload's sequence ID to record payload packet loss.
     /// Returns true if we should accept the payload, false if it's too old.
     /// Does not trigger any notification events.
     /// </summary>
-    internal bool RecordPayload(long curTime, ushort sequence, int length)
+    internal bool RecordPayload(
+      long curTime, 
+      ushort sequence, 
+      int packetLength)
     {
-      return this.traffic.OnReceivePayload(curTime, sequence, length);
+      this.bandwidthIn.AddPayload(packetLength);
+      return this.quality.OnReceivePayload(curTime, sequence);
     }
 
     /// <summary>
@@ -276,48 +303,66 @@ namespace MiniUDP
     /// </summary>
     internal void RecordCarrier(
       long curTime,
-      ushort messageAck)
+      ushort messageAck,
+      int packetLength)
     {
-      this.traffic.OnReceiveOther(curTime);
+      this.bandwidthIn.AddCarrier(packetLength);
+      this.quality.OnReceiveCarrier(curTime);
       this.DrainOutgoing(messageAck);
     }
 
     /// <summary>
-    /// Records receipt of a message and updates our ack counter. 
-    /// Return true iff the message is new.
+    /// Processes statistics received from pong packets.
     /// Does not trigger any notification events.
     /// </summary>
-    internal bool RecordMessage(long curTime, ushort messageSeq)
+    internal void RecordPing(
+      long curTime, 
+      byte loss,
+      int packetLength)
     {
-      this.AckRequested = true;
-      return this.traffic.OnReceiveMessage(curTime, messageSeq);
+      this.bandwidthIn.AddOther(packetLength);
+      this.quality.OnReceivePing(curTime, loss);
     }
 
     /// <summary>
     /// Processes statistics received from pong packets.
     /// Does not trigger any notification events.
     /// </summary>
-    internal void RecordPing(long curTime, byte loss)
+    internal void RecordPong(
+      long curTime, 
+      byte pongSeq, 
+      byte drop,
+      int packetLength)
     {
-      this.traffic.OnReceivePing(curTime, loss);
-    }
-
-    /// <summary>
-    /// Processes statistics received from pong packets.
-    /// Does not trigger any notification events.
-    /// </summary>
-    internal void RecordPong(long curTime, byte pongSeq, byte drop)
-    {
-      this.traffic.OnReceivePong(curTime, pongSeq, drop);
+      this.bandwidthIn.AddOther(packetLength);
+      this.quality.OnReceivePong(curTime, pongSeq, drop);
     }
 
     /// <summary>
     /// Records the fact that we've received data.
     /// Does not trigger any notification events.
     /// </summary>
-    internal void RecordOther(long curTime)
+    internal void RecordOther(long curTime, int packetLength)
     {
-      this.traffic.OnReceiveOther(curTime);
+      this.bandwidthIn.AddOther(packetLength);
+      this.quality.OnReceiveOther(curTime);
+    }
+    #endregion
+
+    #region Incoming Metric Recording
+    internal void RecordPayloadOut(int packetLength)
+    {
+      this.bandwidthOut.AddPayload(packetLength);
+    }
+
+    internal void RecordCarrierOut(int packetLength)
+    {
+      this.bandwidthOut.AddCarrier(packetLength);
+    }
+
+    internal void RecordOtherOut(int packetLength)
+    {
+      this.bandwidthOut.AddOther(packetLength);
     }
     #endregion
 
