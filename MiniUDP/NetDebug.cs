@@ -32,7 +32,6 @@ namespace MiniUDP
         message);
     }
 
-    [Conditional("DEBUG")]
     internal static void LogError(object message)
     {
       Console.Error.WriteLine(
