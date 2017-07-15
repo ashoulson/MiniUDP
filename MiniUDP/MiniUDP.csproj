@@ -9,6 +9,7 @@
     <RepositoryUrl>https://github.com/ashoulson/MiniUDP</RepositoryUrl>
     <PackageProjectUrl>https://github.com/ashoulson/MiniUDP</PackageProjectUrl>
     <Version>0.7</Version>
+    <AssemblyVersion>0.7.0.0</AssemblyVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
