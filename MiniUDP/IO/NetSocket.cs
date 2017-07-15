@@ -83,7 +83,8 @@ namespace MiniUDP
 
     internal void Close()
     {
-      this.rawSocket.Close();
+      // TODO STANDARD: NOT SUPPORTED IN STANDARD
+      //this.rawSocket.Close();
       this.rawSocket = null;
     }
 

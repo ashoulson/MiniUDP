@@ -1,71 +1,20 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{2F6BDFFF-CF4E-4C97-9ECB-04A4E4282660}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>MiniUDP</RootNamespace>
-    <AssemblyName>MiniUDP</AssemblyName>
-    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <TargetFrameworkProfile />
+    <TargetFramework>netstandard1.4</TargetFramework>
+    <Authors>Alexander Shoulson</Authors>
+    <Company>Alexander Shoulson</Company>
+    <Description>A Simple UDP Layer for Shipping and Receiving Byte Arrays</Description>
+    <Copyright>Copyright © Alexander Shoulson 2016-2017</Copyright>
+    <RepositoryUrl>https://github.com/ashoulson/MiniUDP</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/ashoulson/MiniUDP</PackageProjectUrl>
+    <Version>0.7</Version>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>TRACE;DEBUG</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Debug\MiniUDP.xml</DocumentationFile>
-    <NoWarn>1591</NoWarn>
+    <DebugSymbols>True</DebugSymbols>
+    <NoWarn>1701;1702;1705;1591</NoWarn>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>none</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <NoWarn>1591</NoWarn>
-  </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="System" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="IO\NetEvent.cs" />
-    <Compile Include="IO\NetEncoding.cs" />
-    <Compile Include="IO\NetReceiver.cs" />
-    <Compile Include="Metrics\NetReport.cs" />
-    <Compile Include="IO\NetSender.cs" />
-    <Compile Include="Latency\NetDelay.cs" />
-    <Compile Include="Metrics\NetBandwidth.cs" />
-    <Compile Include="Util\Heap.cs" />
-    <Compile Include="Util\Noise.cs" />
-    <Compile Include="NetUtil.cs" />
-    <Compile Include="NetConfig.cs" />
-    <Compile Include="NetCore.cs" />
-    <Compile Include="NetDebug.cs" />
-    <Compile Include="NetPeer.cs" />
-    <Compile Include="NetPool.cs" />
-    <Compile Include="IO\NetSocket.cs" />
-    <Compile Include="Metrics\NetQuality.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Util\RingBuffer.cs" />
-    <Compile Include="Util\Quality\PingCounter.cs" />
-    <Compile Include="Util\Quality\SequenceCounter.cs" />
-  </ItemGroup>
-  <ItemGroup />
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
+
 </Project>
