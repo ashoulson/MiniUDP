@@ -91,34 +91,35 @@ namespace MiniUDP
       }
     }
 
-    /// <summary>
-    /// Returns an DNS address string as an IPEndpoint.
-    /// </summary>
-    public static IPEndPoint AddressToEndPoint(string address, int port)
-    {
-      try
-      {
-        IPAddress[] addresses = Dns.GetHostAddresses(address);
-        if (addresses.Length == 1)
-          return new IPEndPoint(addresses[0], port);
-        return null;
-      }
-      catch (ArgumentNullException)
-      {
-        return null;
-      }
-      catch (ArgumentOutOfRangeException)
-      {
-        return null;
-      }
-      catch (SocketException)
-      {
-        return null;
-      }
-      catch (ArgumentException)
-      {
-        return null;
-      }
-    }
+    // TODO STANDARD: NOT SUPPORTED IN STANDARD
+    ///// <summary>
+    ///// Returns an DNS address string as an IPEndpoint.
+    ///// </summary>
+    //public static IPEndPoint AddressToEndPoint(string address, int port)
+    //{
+    //  try
+    //  {
+    //    IPAddress[] addresses = Dns.GetHostAddresses(address);
+    //    if (addresses.Length == 1)
+    //      return new IPEndPoint(addresses[0], port);
+    //    return null;
+    //  }
+    //  catch (ArgumentNullException)
+    //  {
+    //    return null;
+    //  }
+    //  catch (ArgumentOutOfRangeException)
+    //  {
+    //    return null;
+    //  }
+    //  catch (SocketException)
+    //  {
+    //    return null;
+    //  }
+    //  catch (ArgumentException)
+    //  {
+    //    return null;
+    //  }
+    //}
   }
 }
