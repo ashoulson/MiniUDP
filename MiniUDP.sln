@@ -1,17 +1,19 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25123.0
+# Visual Studio 15
+VisualStudioVersion = 15.0.27130.2010
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniUDP", "MiniUDP\MiniUDP.csproj", "{2F6BDFFF-CF4E-4C97-9ECB-04A4E4282660}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MiniUDP", "MiniUDP\MiniUDP.csproj", "{2F6BDFFF-CF4E-4C97-9ECB-04A4E4282660}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SampleClient", "SampleClient\SampleClient.csproj", "{00247247-297F-413E-BA96-759E22034D6C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DemoClient", "Demo\DemoClient\DemoClient.csproj", "{00247247-297F-413E-BA96-759E22034D6C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SampleServer", "SampleServer\SampleServer.csproj", "{1C46FF0A-AE62-40CE-B49B-1EB940AC9E45}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DemoServer", "Demo\DemoServer\DemoServer.csproj", "{1C46FF0A-AE62-40CE-B49B-1EB940AC9E45}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{CD693CCF-11A6-4746-9F22-E55B9C5AFADB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniUDP.Tests", "MiniUDP.Tests\MiniUDP.Tests.csproj", "{CD693CCF-11A6-4746-9F22-E55B9C5AFADB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SampleCommon", "SampleCommon\SampleCommon.csproj", "{85C3E882-7FA3-41B5-9E5C-72189C6F3ECB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DemoUtil", "Demo\DemoUtil\DemoUtil.csproj", "{85C3E882-7FA3-41B5-9E5C-72189C6F3ECB}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Demo", "Demo", "{170BC700-FB4A-4BFC-AA26-17CB4AC13E70}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -41,5 +43,13 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{00247247-297F-413E-BA96-759E22034D6C} = {170BC700-FB4A-4BFC-AA26-17CB4AC13E70}
+		{1C46FF0A-AE62-40CE-B49B-1EB940AC9E45} = {170BC700-FB4A-4BFC-AA26-17CB4AC13E70}
+		{85C3E882-7FA3-41B5-9E5C-72189C6F3ECB} = {170BC700-FB4A-4BFC-AA26-17CB4AC13E70}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {CA55E4C6-563B-437D-8AD9-A240EBCD0EA9}
 	EndGlobalSection
 EndGlobal
