@@ -77,7 +77,7 @@ namespace MiniUDP
     public NetCore(string version, bool allowConnections)
     {
       if (Encoding.UTF8.GetByteCount(version) > NetConfig.MAX_VERSION_BYTES)
-        throw new ApplicationException("Version string too long");
+        throw new ArgumentException("Version string too long");
 
       this.messagePool = new NetPool<NetMessage>();
       this.peers = new Dictionary<IPEndPoint, NetPeer>();
@@ -134,7 +134,7 @@ namespace MiniUDP
       if (token == null)
         throw new ArgumentNullException("Token string is null");
       if (Encoding.UTF8.GetByteCount(token) > NetConfig.MAX_TOKEN_BYTES)
-        throw new ApplicationException("Token string too long");
+        throw new ArgumentException("Token string too long");
 
       NetPeer pending = new NetPeer(this, false, endPoint, token, this.Time);
       this.peers.Add(pending.EndPoint, pending);
