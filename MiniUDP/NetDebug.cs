@@ -23,76 +23,25 @@ using System.Diagnostics;
 
 namespace MiniUDP
 {
-  public interface INetDebugLogger
+  internal static class NetDebug
   {
-    void LogMessage(object message);
-    void LogWarning(object message);
-    void LogError(object message);
-  }
-
-  internal class NetConsoleLogger : INetDebugLogger
-  {
-    public void LogError(object message)
+    internal static void LogNotify(object message)
     {
-      NetConsoleLogger.Log("ERROR: " + message, ConsoleColor.Red);
+      Console.WriteLine(
+        "NOTIFY: {0} [MiniUDP]", 
+        message);
     }
 
-    public void LogWarning(object message)
+    internal static void LogError(object message)
     {
-      NetConsoleLogger.Log("WARNING: " + message, ConsoleColor.Yellow);
-    }
-
-    public void LogMessage(object message)
-    {
-      NetConsoleLogger.Log("INFO: " + message, ConsoleColor.Gray);
-    }
-
-    private static void Log(object message, ConsoleColor color)
-    {
-      ConsoleColor current = Console.ForegroundColor;
-      Console.ForegroundColor = color;
-      Console.WriteLine(message);
-      Console.ForegroundColor = current;
-    }
-  }
-
-  public static class NetDebug
-  {
-    public static INetDebugLogger Logger = new NetConsoleLogger();
-
-    [Conditional("DEBUG")]
-    public static void LogMessage(object message)
-    {
-      if (NetDebug.Logger != null)
-        lock (NetDebug.Logger)
-          NetDebug.Logger.LogMessage(message);
+      Console.Error.WriteLine(
+        "ERROR: {0} [MiniUDP]\n {1}", 
+        message, 
+        Environment.StackTrace);
     }
 
     [Conditional("DEBUG")]
-    public static void LogWarning(object message)
-    {
-      if (NetDebug.Logger != null)
-        lock (NetDebug.Logger)
-          NetDebug.Logger.LogWarning(message);
-    }
-
-    [Conditional("DEBUG")]
-    public static void LogError(object message)
-    {
-      if (NetDebug.Logger != null)
-        lock (NetDebug.Logger)
-          NetDebug.Logger.LogError(message);
-    }
-
-    [Conditional("DEBUG")]
-    public static void Assert(bool condition)
-    {
-      if (condition == false)
-        NetDebug.LogError("Assert Failed!");
-    }
-
-    [Conditional("DEBUG")]
-    public static void Assert(bool condition, object message)
+    internal static void Assert(bool condition, string message = null)
     {
       if (condition == false)
         NetDebug.LogError("Assert Failed: " + message);

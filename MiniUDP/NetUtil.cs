@@ -20,6 +20,7 @@
 
 using System;
 using System.Net;
+using System.Net.Sockets;
 
 namespace MiniUDP
 {
@@ -71,21 +72,54 @@ namespace MiniUDP
     }
 
     /// <summary>
-    /// Returns an IPv4 IP:Port string as an IPEndpoint.
+    /// Returns an IPv4 IP.IP.IP.IP string as an IPEndpoint.
     /// </summary>
-    public static IPEndPoint StringToEndPoint(string address)
+    public static IPEndPoint IPToEndPoint(string ip, int port)
     {
-      string[] split = address.Split(':');
-      string stringAddress = split[0];
-      string stringPort = split[1];
-
-      int port = int.Parse(stringPort);
-      IPAddress ipaddress = IPAddress.Parse(stringAddress);
-      IPEndPoint endpoint = new IPEndPoint(ipaddress, port);
-
-      if (endpoint == null)
-        throw new ArgumentException("Failed to parse address: " + address);
-      return endpoint;
+      try
+      {
+        IPAddress address = IPAddress.Parse(ip);
+        return new IPEndPoint(address, port);
+      }
+      catch (ArgumentNullException)
+      {
+        return null;
+      }
+      catch (FormatException)
+      {
+        return null;
+      }
     }
+
+    // TODO STANDARD: NOT SUPPORTED IN STANDARD
+    ///// <summary>
+    ///// Returns an DNS address string as an IPEndpoint.
+    ///// </summary>
+    //public static IPEndPoint AddressToEndPoint(string address, int port)
+    //{
+    //  try
+    //  {
+    //    IPAddress[] addresses = Dns.GetHostAddresses(address);
+    //    if (addresses.Length == 1)
+    //      return new IPEndPoint(addresses[0], port);
+    //    return null;
+    //  }
+    //  catch (ArgumentNullException)
+    //  {
+    //    return null;
+    //  }
+    //  catch (ArgumentOutOfRangeException)
+    //  {
+    //    return null;
+    //  }
+    //  catch (SocketException)
+    //  {
+    //    return null;
+    //  }
+    //  catch (ArgumentException)
+    //  {
+    //    return null;
+    //  }
+    //}
   }
 }
