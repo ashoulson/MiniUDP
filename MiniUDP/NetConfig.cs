@@ -18,6 +18,8 @@
  *  3. This notice may not be removed or altered from any source distribution.
 */
 
+using System.Net.Sockets;
+
 namespace MiniUDP
 {
   /// <summary>
@@ -55,28 +57,15 @@ namespace MiniUDP
     Payload,
   }
 
-  internal enum NetEventType : byte
-  {
-    INVALID = 0,
-
-    Notification,
-    Payload,
-
-    PeerConnected, // Peer successfully connected and was accepted
-    PeerClosed,    // Peer closed due to some reason (remote or local)
-  }
-
   public class NetConfig
   {
     #region Timing
     public static int ShortTickRate = 250;
     public static int LongTickRate = 1000;
-    public static int SleepTime = 1;
-    public static long ConnectionTimeOut = 15000;
+    public static long ConnectionTimeOut = 10000;
     #endregion
 
     #region Counts
-    public static int MaxPendingNotifications = 100;
     public static int MaxPacketReads = 50;
     #endregion
 
@@ -97,9 +86,10 @@ namespace MiniUDP
     /// Size of the window used for smoothing ping averages.
     /// </summary>
     public const int PING_SMOOTHING_WINDOW = 5;
+    internal const int BANDWIDTH_HISTORY = 5;
 
     #region Packet
-    internal const int SOCKET_BUFFER_SIZE = 2048;
+    internal const int SOCKET_BUFFER_SIZE = 12582912; // 12MiB
     public const int DATA_MAXIMUM = 1200; // Max size for a data container
     public const int DATA_INITIAL = 128; // Starting size for a new container
     public const int DATA_PADDING = 8; // Bytes to add when resizing container
@@ -110,6 +100,7 @@ namespace MiniUDP
 
     internal const byte DONT_NOTIFY_PEER = 0;
     internal const byte DEFAULT_USER_REASON = 255;
+    internal const SocketError DEFAULT_ERROR = SocketError.SocketError;
     #endregion
   }
 }
