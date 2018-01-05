@@ -1,4 +1,0 @@
-E:\Users\Main\Development\TaranisNew\Include\MiniUDP\Demo\DemoUtil\obj\Debug\netstandard2.0\DemoUtil.csprojResolveAssemblyReference.cache
-E:\Users\Main\Development\TaranisNew\Include\MiniUDP\Demo\DemoUtil\obj\Debug\netstandard2.0\DemoUtil.csproj.CoreCompileInputs.cache
-E:\Users\Main\Development\TaranisNew\Include\MiniUDP\Demo\DemoUtil\obj\Debug\netstandard2.0\DemoUtil.AssemblyInfoInputs.cache
-E:\Users\Main\Development\TaranisNew\Include\MiniUDP\Demo\DemoUtil\obj\Debug\netstandard2.0\DemoUtil.AssemblyInfo.cs

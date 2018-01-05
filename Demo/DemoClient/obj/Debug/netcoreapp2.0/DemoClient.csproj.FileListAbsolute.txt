@@ -1,4 +1,0 @@
-E:\Users\Main\Development\TaranisNew\Include\MiniUDP\Demo\DemoClient\obj\Debug\netcoreapp2.0\DemoClient.csprojResolveAssemblyReference.cache
-E:\Users\Main\Development\TaranisNew\Include\MiniUDP\Demo\DemoClient\obj\Debug\netcoreapp2.0\DemoClient.csproj.CoreCompileInputs.cache
-E:\Users\Main\Development\TaranisNew\Include\MiniUDP\Demo\DemoClient\obj\Debug\netcoreapp2.0\DemoClient.AssemblyInfoInputs.cache
-E:\Users\Main\Development\TaranisNew\Include\MiniUDP\Demo\DemoClient\obj\Debug\netcoreapp2.0\DemoClient.AssemblyInfo.cs
