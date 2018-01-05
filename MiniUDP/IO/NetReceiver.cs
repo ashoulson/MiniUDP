@@ -24,7 +24,8 @@ using System.Net.Sockets;
 namespace MiniUDP
 {
   /// <summary>
-  /// A class for receiving and buffering data from a socket.
+  /// A class for receiving and buffering data from a socket. Note that this
+  /// class is NOT thread safe and must not be shared across threads.
   /// </summary>
   internal class NetReceiver
   {
@@ -41,7 +42,7 @@ namespace MiniUDP
 #endif
     }
 
-    internal SocketError TryReceive(
+    public SocketError TryReceive(
       out IPEndPoint source,
       out byte[] buffer,
       out int length)
@@ -66,11 +67,9 @@ namespace MiniUDP
     #region Latency Simulation
 #if DEBUG
     private readonly NetDelay inQueue;
-#endif
 
-    internal void Update(long currentTime)
+    internal void Update()
     {
-#if DEBUG
       if (NetConfig.LatencySimulation)
       {
         for (int i = 0; i < NetConfig.MaxPacketReads; i++)
@@ -91,8 +90,8 @@ namespace MiniUDP
       {
         this.inQueue.Clear();
       }
-#endif
     }
+#endif
     #endregion
   }
 }

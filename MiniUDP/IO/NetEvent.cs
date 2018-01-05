@@ -24,21 +24,33 @@ using System.Net.Sockets;
 namespace MiniUDP
 {
   /// <summary>
-  /// A class for storing, transmitting, and reading reliable net messages.
+  /// A multipurpose class (ab)used in two ways. Used for passing messages
+  /// between threads internally (called "events" in this instance) on the 
+  /// pipeline queues. Also encoded/decoded over the network to pass reliable 
+  /// messages to connected peers (called "notifications" in this instance).
   /// </summary>
-  internal class NetMessage : INetPoolable<NetMessage>
+  internal class NetEvent : INetPoolable<NetEvent>
   {
-    void INetPoolable<NetMessage>.Reset() { this.Reset(); }
+    void INetPoolable<NetEvent>.Reset() { this.Reset(); }
 
     internal byte[] EncodedData { get { return this.buffer; } }
     internal ushort EncodedLength { get { return this.length; } }
-    internal NetPeer Peer { get; private set; }  // Associated peer
-    internal ushort Sequence { get; set; }
 
+    // Buffer for encoded user data
     private byte[] buffer;
     private ushort length;
 
-    public NetMessage()
+    // Additional data for passing events around internally, not synchronized
+    internal NetEventType EventType { get; private set; }
+    internal NetPeer Peer { get; private set; }  // Associated peer
+
+    // Additional data, may or may not be set
+    internal NetCloseReason CloseReason { get; set; }
+    internal SocketError SocketError { get; set; }
+    internal byte UserKickReason { get; set; }
+    internal ushort Sequence { get; set; }
+
+    public NetEvent()
     {
       this.buffer = new byte[NetConfig.DATA_INITIAL];
       this.Reset();
@@ -47,21 +59,32 @@ namespace MiniUDP
     private void Reset()
     {
       this.length = 0;
+      this.EventType = NetEventType.INVALID;
       this.Peer = null;
+
+      this.CloseReason = NetCloseReason.INVALID;
+      this.SocketError = SocketError.SocketError;
+      this.UserKickReason = 0;
       this.Sequence = 0;
     }
 
     internal void Initialize(
+      NetEventType type, 
       NetPeer peer)
     {
       this.Reset();
+      this.length = 0;
+      this.EventType = type;
       this.Peer = peer;
     }
 
     internal bool ReadData(byte[] sourceBuffer, int position, ushort length)
     {
       if (length > NetConfig.DATA_MAXIMUM)
+      {
+        NetDebug.LogError("Data too long for NetEvent");
         return false;
+      }
 
       // Resize if necessary
       int paddedLength = length + NetConfig.DATA_PADDING;

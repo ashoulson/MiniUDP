@@ -19,47 +19,43 @@
 */
 
 using System.Collections.Generic;
+using System.Threading;
 
 namespace MiniUDP
 {
-  internal interface INetPoolable<T>
-    where T : INetPoolable<T>
+  internal class NetPipeline<T>
   {
-    void Reset();
-  }
+    private Queue<T> queue;
+    private volatile int count;
 
-  internal interface INetPool<T>
-  {
-    T Allocate();
-    void Deallocate(T obj);
-  }
-
-  internal class NetPool<T> : INetPool<T>
-    where T : INetPoolable<T>, new()
-  {
-    private readonly Stack<T> freeList;
-
-    public NetPool()
+    public NetPipeline()
     {
-      this.freeList = new Stack<T>();
+      this.queue = new Queue<T>();
+      this.count = 0;
     }
 
-    public T Allocate()
+    public bool TryDequeue(out T obj)
     {
-      lock(this.freeList)
-        if (this.freeList.Count > 0)
-          return this.freeList.Pop();
+      // This check can be done out of lock...
+      obj = default(T);
+      if (this.count <= 0)
+        return false;
 
-      T obj = new T();
-      obj.Reset();
-      return obj;
+      lock (this.queue)
+      {
+        obj = this.queue.Dequeue();
+        Interlocked.Decrement(ref this.count);
+        return true;
+      }
     }
 
-    public void Deallocate(T obj)
+    public void Enqueue(T obj)
     {
-      obj.Reset();
-      lock(this.freeList)
-        this.freeList.Push(obj);
+      lock (this.queue)
+        this.queue.Enqueue(obj);
+
+      // ...as long as this ++ is atomic and happens after we add
+      Interlocked.Increment(ref this.count);
     }
   }
 }

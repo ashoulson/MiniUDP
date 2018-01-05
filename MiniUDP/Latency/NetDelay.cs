@@ -30,6 +30,9 @@ namespace MiniUDP
 {
   internal class NetDelay
   {
+    private readonly static Noise PingNoise = new Noise();
+    private readonly static Noise LossNoise = new Noise();
+
     private class Entry : IComparable<Entry>
     {
       public long ReleaseTime { get { return this.releaseTime; } }
@@ -68,15 +71,11 @@ namespace MiniUDP
 
     private readonly Heap<Entry> entries;
     private readonly Stopwatch timer;
-    private readonly Noise pingNoise;
-    private readonly Noise lossNoise;
 
     public NetDelay()
     {
       this.entries = new Heap<Entry>();
       this.timer = new Stopwatch();
-      this.pingNoise = new Noise();
-      this.lossNoise = new Noise();
       this.timer.Start();
     }
 
@@ -84,7 +83,7 @@ namespace MiniUDP
     {
       // See if we should drop the packet
       float loss =
-        this.lossNoise.GetValue(
+        NetDelay.LossNoise.GetValue(
           this.timer.ElapsedMilliseconds,
            NetConfig.LossTurbulence);
       if (loss < NetConfig.LossChance)
@@ -94,7 +93,7 @@ namespace MiniUDP
       float latencyRange = 
         NetConfig.MaximumLatency - NetConfig.MinimumLatency;
       float latencyNoise =
-        this.pingNoise.GetValue(
+        NetDelay.PingNoise.GetValue(
           this.timer.ElapsedMilliseconds,
           NetConfig.LatencyTurbulence);
       int latency = 
