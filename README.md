@@ -8,7 +8,7 @@ Based loosely on [MassiveNet](https://github.com/jakevn/MassiveNet), and [LiteNe
 
 ---
 
-[![Build status](https://ci.appveyor.com/api/projects/status/1dt5aepocun584g4/branch/master?svg=true)](https://ci.appveyor.com/project/ashoulson/miniudp/branch/master)
+**Branch Status:** Functional but undocumented. Demos and unit tests are wildly out of date and should not be trusted.
 
 Supported Networking Tasks:
 - UDP traffic I/O for byte[] arrays with very little overhead
@@ -29,3 +29,6 @@ Not Supported:
 - Fragmentation/reassembly (MiniUDP enforces a hard MTU for its payload size)
 - Data serialization (MiniUDP expects a byte[] array and int length for all data)
 - RPCs
+
+Usage Notes:
+- MiniUDP is not inherently multithreaded. This library is designed to work within the game loop and is optimized for server performance on cheap single-vCore VPS deployments.
