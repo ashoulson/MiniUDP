@@ -31,4 +31,4 @@ Not Supported:
 - RPCs
 
 Usage Notes:
-- MiniUDP is not inherently multithreaded. This library is designed to work within the game loop and is optimized for server performance on cheap single-vCore VPS deployments.
+- MiniUDP is not inherently multithreaded. This library is designed to work within a (fixed) game loop and is optimized for server performance on cheap single-vCore VPS deployments.
