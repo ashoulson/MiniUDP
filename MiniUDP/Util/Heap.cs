@@ -46,9 +46,7 @@ namespace MiniUDP.Util
 
     public Heap(Comparer<T> comparer)
     {
-      if (comparer == null)
-        throw new ArgumentNullException("comparer");
-      this.Comparer = comparer;
+      this.Comparer = comparer ?? throw new ArgumentNullException("comparer");
     }
 
     public void Clear()

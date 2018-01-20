@@ -164,8 +164,7 @@ namespace MiniUDP
       this.ReadPackets();
       this.bandwidthIn.Update(this.Time);
 
-      bool longTick;
-      if (this.TickAvailable(out longTick))
+      if (this.TickAvailable(out bool longTick))
       {
         this.activePeerList.Clear();
         this.activePeerList.AddRange(this.peers.Values);
@@ -208,11 +207,11 @@ namespace MiniUDP
     {
       for (int i = 0; i < NetConfig.MaxPacketReads; i++)
       {
-        IPEndPoint source;
-        byte[] buffer;
-        int length;
         SocketError result =
-          this.receiver.TryReceive(out source, out buffer, out length);
+          this.receiver.TryReceive(
+            out IPEndPoint source, 
+            out byte[] buffer, 
+            out int length);
         if (NetSocket.Succeeded(result) == false)
           return;
 
@@ -222,43 +221,39 @@ namespace MiniUDP
           // We don't have a peer yet -- special case
           this.HandleConnectRequest(source, buffer, length);
         }
-        else
+        else if (this.peers.TryGetValue(source, out NetPeer peer))
         {
-          NetPeer peer;
-          if (this.peers.TryGetValue(source, out peer))
+          switch (type)
           {
-            switch (type)
-            {
-              case NetPacketType.Accept:
-                this.bandwidthIn.AddOther(length);
-                this.HandleConnectAccept(peer, buffer, length);
-                break;
+            case NetPacketType.Accept:
+              this.bandwidthIn.AddOther(length);
+              this.HandleConnectAccept(peer, buffer, length);
+              break;
 
-              case NetPacketType.Kick:
-                this.bandwidthIn.AddOther(length);
-                this.HandleKick(peer, buffer, length);
-                break;
+            case NetPacketType.Kick:
+              this.bandwidthIn.AddOther(length);
+              this.HandleKick(peer, buffer, length);
+              break;
 
-              case NetPacketType.Ping:
-                this.bandwidthIn.AddOther(length);
-                this.HandlePing(peer, buffer, length);
-                break;
+            case NetPacketType.Ping:
+              this.bandwidthIn.AddOther(length);
+              this.HandlePing(peer, buffer, length);
+              break;
 
-              case NetPacketType.Pong:
-                this.bandwidthIn.AddOther(length);
-                this.HandlePong(peer, buffer, length);
-                break;
+            case NetPacketType.Pong:
+              this.bandwidthIn.AddOther(length);
+              this.HandlePong(peer, buffer, length);
+              break;
 
-              case NetPacketType.Carrier:
-                this.bandwidthIn.AddCarrier(length);
-                this.HandleCarrier(peer, buffer, length);
-                break;
+            case NetPacketType.Carrier:
+              this.bandwidthIn.AddCarrier(length);
+              this.HandleCarrier(peer, buffer, length);
+              break;
 
-              case NetPacketType.Payload:
-                this.bandwidthIn.AddPayload(length);
-                this.HandlePayload(peer, buffer, length);
-                break;
-            }
+            case NetPacketType.Payload:
+              this.bandwidthIn.AddPayload(length);
+              this.HandlePayload(peer, buffer, length);
+              break;
           }
         }
       }
@@ -276,16 +271,14 @@ namespace MiniUDP
         return;
 
       // Read the payload
-      ushort payloadSeq;
-      ushort dataLength;
       bool success =
         NetEncoding.ReadPayload(
           peer,
           buffer,
           packetLength,
           this.reusableBuffer,
-          out dataLength,
-          out payloadSeq);
+          out ushort dataLength,
+          out ushort payloadSeq);
 
       // Validate
       if (success == false)
@@ -317,8 +310,6 @@ namespace MiniUDP
         return;
 
       // Read the carrier and messages
-      ushort messageAck;
-      ushort messageSeq;
       this.reusableQueue.Clear();
       bool success =
         NetEncoding.ReadCarrier(
@@ -326,8 +317,8 @@ namespace MiniUDP
           peer,
           buffer,
           packetLength,
-          out messageAck,
-          out messageSeq,
+          out ushort messageAck,
+          out ushort messageSeq,
           this.reusableQueue);
 
       // Validate
@@ -364,13 +355,11 @@ namespace MiniUDP
       byte[] buffer,
       int packetLength)
     {
-      string version;
-      string token;
       bool success =
         NetEncoding.ReadConnectRequest(
           buffer,
-          out version,
-          out token);
+          out string version,
+          out string token);
 
       // Validate
       if (success == false)
@@ -426,14 +415,12 @@ namespace MiniUDP
       if (peer.IsClosed)
         return;
 
-      byte rawReason;
-      byte userReason;
       bool success =
         NetEncoding.ReadProtocol(
           buffer,
           packetLength,
-          out rawReason,
-          out userReason);
+          out byte rawReason,
+          out byte userReason);
 
       // Validate
       if (success == false)
@@ -468,14 +455,12 @@ namespace MiniUDP
       if (peer.IsConnected == false)
         return;
 
-      byte pingSeq;
-      byte loss;
       bool success =
         NetEncoding.ReadProtocol(
           buffer,
           packetLength,
-          out pingSeq,
-          out loss);
+          out byte pingSeq,
+          out byte loss);
 
       // Validate
       if (success == false)
@@ -499,14 +484,12 @@ namespace MiniUDP
       if (peer.IsConnected == false)
         return;
 
-      byte pongSeq;
-      byte drop;
       bool success =
         NetEncoding.ReadProtocol(
           buffer,
           packetLength,
-          out pongSeq,
-          out drop);
+          out byte pongSeq,
+          out byte drop);
 
       // Validate
       if (success == false)
@@ -695,8 +678,7 @@ namespace MiniUDP
       IPEndPoint source,
       string version)
     {
-      NetPeer peer;
-      if (this.peers.TryGetValue(source, out peer))
+      if (this.peers.TryGetValue(source, out NetPeer peer))
       {
         this.sender.SendAccept(peer);
         return false;

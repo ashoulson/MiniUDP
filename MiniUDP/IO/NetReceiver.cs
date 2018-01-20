@@ -75,13 +75,11 @@ namespace MiniUDP
       {
         for (int i = 0; i < NetConfig.MaxPacketReads; i++)
         {
-          IPEndPoint source;
-          int length;
           SocketError result =
             this.socket.TryReceive(
-              out source, 
-              this.receiveBuffer, 
-              out length);
+              out IPEndPoint source,
+              this.receiveBuffer,
+              out int length);
           if (NetSocket.Succeeded(result) == false)
             return;
           this.inQueue.Enqueue(source, this.receiveBuffer, length);
