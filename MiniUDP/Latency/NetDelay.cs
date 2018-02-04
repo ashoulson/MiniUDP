@@ -73,7 +73,7 @@ namespace MiniUDP
 
     public NetDelay()
     {
-      this.entries = new Heap<Entry>();
+      this.entries = new Heap<Entry>(new EntryComparer());
       this.timer = new Stopwatch();
       this.pingNoise = new Noise();
       this.lossNoise = new Noise();
